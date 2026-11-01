@@ -1,0 +1,12 @@
+/workspace/windows/Cp9550Native/Cp9550Native.Core/obj/Release/net8.0/Cp9550Native.Core.csproj.AssemblyReference.cache
+/workspace/windows/Cp9550Native/Cp9550Native.Core/obj/Release/net8.0/Cp9550Native.Core.GeneratedMSBuildEditorConfig.editorconfig
+/workspace/windows/Cp9550Native/Cp9550Native.Core/obj/Release/net8.0/Cp9550Native.Core.AssemblyInfoInputs.cache
+/workspace/windows/Cp9550Native/Cp9550Native.Core/obj/Release/net8.0/Cp9550Native.Core.AssemblyInfo.cs
+/workspace/windows/Cp9550Native/Cp9550Native.Core/obj/Release/net8.0/Cp9550Native.Core.csproj.CoreCompileInputs.cache
+/workspace/windows/Cp9550Native/Cp9550Native.Core/bin/Release/net8.0/Cp9550Native.Core.deps.json
+/workspace/windows/Cp9550Native/Cp9550Native.Core/bin/Release/net8.0/Cp9550Native.Core.dll
+/workspace/windows/Cp9550Native/Cp9550Native.Core/bin/Release/net8.0/Cp9550Native.Core.pdb
+/workspace/windows/Cp9550Native/Cp9550Native.Core/obj/Release/net8.0/Cp9550Native.Core.dll
+/workspace/windows/Cp9550Native/Cp9550Native.Core/obj/Release/net8.0/refint/Cp9550Native.Core.dll
+/workspace/windows/Cp9550Native/Cp9550Native.Core/obj/Release/net8.0/Cp9550Native.Core.pdb
+/workspace/windows/Cp9550Native/Cp9550Native.Core/obj/Release/net8.0/ref/Cp9550Native.Core.dll

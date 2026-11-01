@@ -1,0 +1,5 @@
+/workspace/windows/Cp9550Native/dist/CP9550Native.pdb
+/workspace/windows/Cp9550Native/dist/drivers/CP9550DW-S.inf
+/workspace/windows/Cp9550Native/dist/drivers/install.ps1
+/workspace/windows/Cp9550Native/dist/Cp9550Native.Core.pdb
+/workspace/windows/Cp9550Native/dist/CP9550Native.exe

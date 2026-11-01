@@ -1,0 +1,267 @@
+using LibUsbDotNet;
+using LibUsbDotNet.Main;
+
+namespace Cp9550Native.Core;
+
+public sealed class PrinterInfo
+{
+    public string Serial { get; init; } = "";
+    public string MediaName { get; init; } = "";
+    public int MediaRemain { get; init; }
+    public int MediaMax { get; init; }
+}
+
+/// <summary>
+/// WinUSB / libusb talker for CP-9550DW-S. Requires the WinUSB INF (or Zadig) once.
+/// </summary>
+public sealed class PrinterDevice : IDisposable
+{
+    private readonly UsbDevice _device;
+    private readonly UsbEndpointWriter _writer;
+    private readonly UsbEndpointReader _reader;
+    private bool _disposed;
+
+    private PrinterDevice(UsbDevice device, UsbEndpointWriter writer, UsbEndpointReader reader)
+    {
+        _device = device;
+        _writer = writer;
+        _reader = reader;
+    }
+
+    public static bool IsPresent()
+    {
+        var finder = new UsbDeviceFinder(UsbIds.VendorId, UsbIds.ProductIdCp9550DwS);
+        var dev = UsbDevice.OpenUsbDevice(finder);
+        if (dev is null)
+            return false;
+        dev.Close();
+        return true;
+    }
+
+    public static PrinterDevice Open()
+    {
+        var finder = new UsbDeviceFinder(UsbIds.VendorId, UsbIds.ProductIdCp9550DwS);
+        var device = UsbDevice.OpenUsbDevice(finder)
+            ?? throw new InvalidOperationException(
+                "CP-9550DW-S nenájdená (USB 06D3:03A5). Nainštaluj WinUSB INF alebo Zadig.");
+
+        if (device is IUsbDevice whole)
+        {
+            whole.SetConfiguration(1);
+            whole.ClaimInterface(0);
+        }
+
+        // Prefer first bulk OUT / bulk IN on the active config.
+        UsbEndpointWriter? writer = null;
+        UsbEndpointReader? reader = null;
+        foreach (var candidate in new[]
+                 {
+                     WriteEndpointID.Ep01, WriteEndpointID.Ep02, WriteEndpointID.Ep03, WriteEndpointID.Ep04,
+                 })
+        {
+            try
+            {
+                writer = device.OpenEndpointWriter(candidate);
+                if (writer is not null)
+                    break;
+            }
+            catch
+            {
+                // try next
+            }
+        }
+
+        foreach (var candidate in new[]
+                 {
+                     ReadEndpointID.Ep01, ReadEndpointID.Ep02, ReadEndpointID.Ep03, ReadEndpointID.Ep04,
+                 })
+        {
+            try
+            {
+                reader = device.OpenEndpointReader(candidate);
+                if (reader is not null)
+                    break;
+            }
+            catch
+            {
+                // try next
+            }
+        }
+
+        if (writer is null || reader is null)
+        {
+            device.Close();
+            throw new InvalidOperationException("Bulk endpointy sa nepodarilo otvoriť.");
+        }
+
+        return new PrinterDevice(device, writer, reader);
+    }
+
+    public void Write(byte[] data, int timeoutMs = 15000)
+    {
+        var ec = _writer.Write(data, timeoutMs, out var transferred);
+        if (ec != ErrorCode.None || transferred != data.Length)
+            throw new IOException($"USB write failed: {ec} ({transferred}/{data.Length})");
+    }
+
+    public byte[] Read(int size = 128, int timeoutMs = 5000)
+    {
+        var buf = new byte[size];
+        var ec = _reader.Read(buf, timeoutMs, out var transferred);
+        if (ec != ErrorCode.None && ec != ErrorCode.IoTimedOut)
+            throw new IOException($"USB read failed: {ec}");
+        if (transferred <= 0)
+            return Array.Empty<byte>();
+        if (transferred == buf.Length)
+            return buf;
+        var slice = new byte[transferred];
+        Buffer.BlockCopy(buf, 0, slice, 0, transferred);
+        return slice;
+    }
+
+    public byte[] Query(byte[] cmd, int size = 64)
+    {
+        Write(cmd);
+        return Read(size);
+    }
+
+    public void HandshakeS()
+    {
+        Write(Protocol.InitCmd1);
+        Write(Protocol.InitCmd2);
+        _ = Read(16);
+    }
+
+    public MediaStatus MediaStatus()
+    {
+        var raw = Query(Protocol.CmdMedia, 64);
+        return Protocol.ParseMediaStatus(raw)
+            ?? throw new InvalidOperationException(
+                $"Neočakávaná media odpoveď: {Convert.ToHexString(raw.AsSpan(0, Math.Min(16, raw.Length)))}");
+    }
+
+    public byte[] Status() => Query(Protocol.CmdStatus, 64);
+
+    public byte[] StatusB() => Query(Protocol.CmdStatusB, 64);
+
+    public string ReadSerial()
+    {
+        var raw = Query(Protocol.CmdSerial, 128);
+        if (raw.Length < 8)
+            return "";
+        var length = raw[4];
+        if (5 + length > raw.Length)
+            return "";
+        try
+        {
+            return System.Text.Encoding.Unicode.GetString(raw, 5, length).Trim();
+        }
+        catch
+        {
+            return Convert.ToHexString(raw);
+        }
+    }
+
+    public PrinterInfo GetInfo()
+    {
+        var media = MediaStatus();
+        return new PrinterInfo
+        {
+            Serial = ReadSerial(),
+            MediaName = media.Name,
+            MediaRemain = media.Remain,
+            MediaMax = media.Max,
+        };
+    }
+
+    public void WaitIdle(TimeSpan? timeout = null)
+    {
+        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromMinutes(3));
+        while (DateTime.UtcNow < deadline)
+        {
+            var sts = Status();
+            var sts5 = sts.Length > 16 ? sts[16] : (byte)0xFF;
+            if (sts5 == 0)
+                return;
+            Thread.Sleep(1000);
+        }
+        throw new TimeoutException("Tlačiareň sa nevrátila do idle.");
+    }
+
+    public void SendSpool(byte[] spool, IProgress<double>? progress = null)
+    {
+        if (spool.Length < 154)
+            throw new ArgumentException("Spool je príliš malý.");
+        if (spool[0] != 0x1B || spool[1] != 0x57 || spool[2] != 0x20 || spool[3] != 0x2E)
+            throw new ArgumentException("Toto nie je CP-9550 header-1 spool.");
+
+        var headers = spool.AsSpan(0, 150).ToArray();
+        var body = spool.AsSpan(150);
+        byte[] planes;
+        if (body.Length >= 4 &&
+            body[^4] == Protocol.Footer9550S[0] &&
+            body[^3] == Protocol.Footer9550S[1] &&
+            body[^2] == Protocol.Footer9550S[2] &&
+            body[^1] == Protocol.Footer9550S[3])
+        {
+            planes = body[..^4].ToArray();
+        }
+        else
+        {
+            planes = body.ToArray();
+        }
+
+        HandshakeS();
+        _ = MediaStatus();
+        _ = StatusB();
+        WaitIdle(TimeSpan.FromSeconds(30));
+
+        Write(headers);
+        Write(Protocol.ClearMemoryS);
+
+        const int chunk = 262144;
+        var sent = 0;
+        while (sent < planes.Length)
+        {
+            var n = Math.Min(chunk, planes.Length - sent);
+            var piece = planes.AsSpan(sent, n).ToArray();
+            Write(piece, timeoutMs: 60000);
+            sent += n;
+            progress?.Report(100.0 * sent / planes.Length);
+        }
+
+        _ = MediaStatus();
+        _ = StatusB();
+        var sts = Status();
+        if (sts.Length > 6 && sts[6] != 0)
+            throw new InvalidOperationException("Kryt tlačiarne je otvorený (alebo status MM error).");
+
+        Write(Protocol.Footer9550S);
+        progress?.Report(100);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        try
+        {
+            if (_device is IUsbDevice whole)
+                whole.ReleaseInterface(0);
+        }
+        catch
+        {
+            // ignore
+        }
+
+        try
+        {
+            _device.Close();
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+}

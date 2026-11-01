@@ -1,0 +1,121 @@
+<Window x:Class="Cp9550Native.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="CP-9550 Native"
+        Height="760" Width="1100"
+        MinHeight="640" MinWidth="900"
+        Background="{StaticResource InkBrush}"
+        Foreground="{StaticResource PaperBrush}"
+        FontFamily="Segoe UI Variable, Segoe UI"
+        WindowStartupLocation="CenterScreen">
+  <Grid Margin="24">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <StackPanel Grid.Row="0" Margin="0,0,0,18">
+      <TextBlock Text="WINDOWS 11 · KIOSK DYE-SUB"
+                 Foreground="{StaticResource Accent2Brush}"
+                 FontSize="11" FontWeight="SemiBold"
+                 Typography.Capitals="AllSmallCaps"/>
+      <TextBlock Text="CP-9550 Native" FontSize="34" FontWeight="Bold" Margin="0,4,0,0"/>
+      <TextBlock Text="Natívna Windows aplikácia pre Mitsubishi CP-9550DW-S — bez Gutenprint soft-proofu, natívne pixely."
+                 Foreground="{StaticResource MuteBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+    </StackPanel>
+
+    <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="1.15*"/>
+        <ColumnDefinition Width="18"/>
+        <ColumnDefinition Width="0.95*"/>
+      </Grid.ColumnDefinitions>
+
+      <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+        <StackPanel>
+          <Border Background="{StaticResource PanelBrush}" CornerRadius="14" Padding="16" Margin="0,0,0,14"
+                  BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+            <StackPanel>
+              <TextBlock Text="1. Médium" FontSize="18" FontWeight="SemiBold"/>
+              <TextBlock Text="Presný pixelový rámec firmvéru -S" Foreground="{StaticResource MuteBrush}" Margin="0,2,0,10"/>
+              <ComboBox x:Name="MediaBox" Height="34"/>
+            </StackPanel>
+          </Border>
+
+          <Border Background="{StaticResource PanelBrush}" CornerRadius="14" Padding="16" Margin="0,0,0,14"
+                  BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+              </Grid.RowDefinitions>
+              <TextBlock Grid.Row="0" Grid.ColumnSpan="3" Text="2. Kvalita" FontSize="18" FontWeight="SemiBold"/>
+              <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,10,0,0">
+                <TextBlock Text="Quality" Foreground="{StaticResource MuteBrush}"/>
+                <ComboBox x:Name="QualityBox" Height="34" Margin="0,4,0,0"/>
+              </StackPanel>
+              <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,10,0,0">
+                <TextBlock Text="Fit" Foreground="{StaticResource MuteBrush}"/>
+                <ComboBox x:Name="FitBox" Height="34" Margin="0,4,0,0"/>
+              </StackPanel>
+              <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,12,0,0">
+                <TextBlock Text="Kópie" Foreground="{StaticResource MuteBrush}"/>
+                <TextBox x:Name="CopiesBox" Text="1" Height="34" Margin="0,4,0,0"
+                         Background="{StaticResource InkBrush}" Foreground="{StaticResource PaperBrush}"
+                         BorderBrush="{StaticResource LineBrush}" VerticalContentAlignment="Center" Padding="8,0"/>
+              </StackPanel>
+            </Grid>
+          </Border>
+
+          <Border Background="{StaticResource PanelBrush}" CornerRadius="14" Padding="16"
+                  BorderBrush="{StaticResource LineBrush}" BorderThickness="1"
+                  AllowDrop="True" Drop="OnDrop" DragOver="OnDragOver">
+            <StackPanel>
+              <TextBlock Text="3. Fotografia" FontSize="18" FontWeight="SemiBold"/>
+              <TextBlock x:Name="FileLabel" Text="Žiadny súbor — pretiahni sem JPEG/PNG/TIFF alebo klikni Vybrať."
+                         Foreground="{StaticResource MuteBrush}" TextWrapping="Wrap" Margin="0,6,0,12"/>
+              <StackPanel Orientation="Horizontal">
+                <Button Content="Vybrať fotku…" Click="OnPickPhoto" Margin="0,0,8,0"/>
+                <Button Content="Obnoviť status" Style="{StaticResource GhostButton}" Click="OnRefreshStatus"/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+
+      <Border Grid.Column="2" Background="{StaticResource PanelBrush}" CornerRadius="14" Padding="16"
+              BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top">
+            <TextBlock Text="Náhľad / tlačiareň" FontSize="18" FontWeight="SemiBold"/>
+            <TextBlock x:Name="PrinterStatus" Text="Tlačiareň: nepripojená"
+                       Foreground="{StaticResource MuteBrush}" Margin="0,4,0,12" TextWrapping="Wrap"/>
+          </StackPanel>
+
+          <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+            <ProgressBar x:Name="Progress" Height="8" Minimum="0" Maximum="100" Margin="0,0,0,10"/>
+            <TextBlock x:Name="StatusText" Foreground="{StaticResource MuteBrush}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+            <Button x:Name="PrintButton" Content="Tlačiť" Click="OnPrint" IsEnabled="False"/>
+            <Button Content="Uložiť .mitsu9550s…" Style="{StaticResource GhostButton}"
+                    Margin="0,8,0,0" Click="OnSaveSpool" IsEnabled="True" x:Name="SaveButton"/>
+          </StackPanel>
+
+          <Border Background="#0A0C0F" CornerRadius="10" BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+            <Image x:Name="PreviewImage" Stretch="Uniform" Margin="8"/>
+          </Border>
+        </DockPanel>
+      </Border>
+    </Grid>
+
+    <TextBlock Grid.Row="2" Margin="0,16,0,0" FontSize="11" Foreground="{StaticResource MuteBrush}"
+               Text="Raz nainštaluj WinUSB (drivers\\install.ps1 alebo Zadig). Potom stačí táto aplikácia — žiadny Gutenprint, žiadny Python."
+               TextWrapping="Wrap"/>
+  </Grid>
+</Window>
