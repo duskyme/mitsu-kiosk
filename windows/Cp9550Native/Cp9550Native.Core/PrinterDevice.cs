@@ -177,12 +177,52 @@ public sealed class PrinterDevice : IDisposable
 
     public byte[] Query(byte[] cmd, int size = 64)
     {
+        FlushInput();
         Write(cmd);
         return Read(size);
     }
 
+    /// <summary>
+    /// Drop stale IN packets (e.g. a late serial reply) so the next command
+    /// response is not mistaken for media/status.
+    /// </summary>
+    private void FlushInput(int timeoutMs = 50, int maxPackets = 16)
+    {
+        var buf = new byte[512];
+        for (var i = 0; i < maxPackets; i++)
+        {
+            var ec = _reader.Read(buf, timeoutMs, out var transferred);
+            if (ec == ErrorCode.IoTimedOut || transferred <= 0)
+                return;
+        }
+    }
+
+    /// <summary>
+    /// Write <paramref name="cmd"/> then read until <paramref name="accept"/>
+    /// matches, skipping leftover packets from earlier commands.
+    /// </summary>
+    private byte[] QueryUntil(byte[] cmd, Func<byte[], bool> accept, int size = 64, int maxReads = 8)
+    {
+        FlushInput();
+        Write(cmd);
+        byte[] last = Array.Empty<byte>();
+        for (var i = 0; i < maxReads; i++)
+        {
+            var timeout = i == 0 ? 5000 : 400;
+            last = Read(size, timeout);
+            if (last.Length == 0)
+                continue;
+            if (accept(last))
+                return last;
+            // Stale/unexpected packet — keep reading for the real reply.
+        }
+
+        return last;
+    }
+
     public void HandshakeS()
     {
+        FlushInput();
         Write(Protocol.InitCmd1);
         Write(Protocol.InitCmd2);
         _ = Read(16);
@@ -190,10 +230,13 @@ public sealed class PrinterDevice : IDisposable
 
     public MediaStatus MediaStatus()
     {
-        var raw = Query(Protocol.CmdMedia, 64);
+        var raw = QueryUntil(
+            Protocol.CmdMedia,
+            b => Protocol.ParseMediaStatus(b) is not null,
+            size: 64);
         return Protocol.ParseMediaStatus(raw)
             ?? throw new InvalidOperationException(
-                $"Neočakávaná media odpoveď: {Convert.ToHexString(raw.AsSpan(0, Math.Min(16, raw.Length)))}");
+                "Neočakávaná media odpoveď: " + Protocol.DescribeUnexpectedReply(raw));
     }
 
     public byte[] Status() => Query(Protocol.CmdStatus, 64);
@@ -202,20 +245,11 @@ public sealed class PrinterDevice : IDisposable
 
     public string ReadSerial()
     {
-        var raw = Query(Protocol.CmdSerial, 128);
-        if (raw.Length < 8)
-            return "";
-        var length = raw[4];
-        if (5 + length > raw.Length)
-            return "";
-        try
-        {
-            return System.Text.Encoding.Unicode.GetString(raw, 5, length).Trim();
-        }
-        catch
-        {
-            return Convert.ToHexString(raw);
-        }
+        var raw = QueryUntil(
+            Protocol.CmdSerial,
+            b => Protocol.LooksLikeSerial(b),
+            size: 128);
+        return Protocol.ParseSerial(raw) ?? "";
     }
 
     public PrinterInfo GetInfo()

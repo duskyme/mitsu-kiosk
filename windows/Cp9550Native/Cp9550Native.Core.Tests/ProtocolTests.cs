@@ -58,4 +58,31 @@ public class ProtocolTests
         Assert.Equal(300, parsed.Remain);
         Assert.Contains("4×6", parsed.Name);
     }
+
+    [Fact]
+    public void ParseSerial_ReadsUtf16Payload()
+    {
+        // Live CP-9550DW-S reply: E4 72 6E 00 | len | UTF-16LE "9550Z D33364"
+        var payload = System.Text.Encoding.Unicode.GetBytes("9550Z D33364");
+        var buf = new byte[5 + payload.Length];
+        buf[0] = 0xE4;
+        buf[1] = 0x72;
+        buf[2] = 0x6E;
+        buf[3] = 0x00;
+        buf[4] = (byte)payload.Length;
+        Buffer.BlockCopy(payload, 0, buf, 5, payload.Length);
+
+        Assert.True(Protocol.LooksLikeSerial(buf));
+        Assert.Equal("9550Z D33364", Protocol.ParseSerial(buf));
+        Assert.Null(Protocol.ParseMediaStatus(buf));
+        Assert.Contains("sériová odpoveď", Protocol.DescribeUnexpectedReply(buf));
+    }
+
+    [Fact]
+    public void ParseMediaStatus_RejectsSerialPacket()
+    {
+        var junk = Convert.FromHexString("E4726E001839003500350030005A0020");
+        Assert.Null(Protocol.ParseMediaStatus(junk));
+        Assert.True(Protocol.LooksLikeSerial(junk));
+    }
 }

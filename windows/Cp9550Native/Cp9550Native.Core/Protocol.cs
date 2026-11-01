@@ -159,6 +159,48 @@ public static class Protocol
         };
         return new MediaStatus(type, max, remain, name);
     }
+
+    /// <summary>
+    /// Serial reply layout observed on CP-9550DW-S:
+    ///   E4 72 6E 00 | len | UTF-16LE payload
+    /// (0x72 0x6E echoes the "rn" serial command).
+    /// </summary>
+    public static bool LooksLikeSerial(ReadOnlySpan<byte> buf) =>
+        buf.Length >= 5 && buf[1] == 0x72 && buf[2] == 0x6E && buf[3] == 0x00;
+
+    public static string? ParseSerial(ReadOnlySpan<byte> buf)
+    {
+        if (!LooksLikeSerial(buf))
+            return null;
+        var length = buf[4];
+        if (5 + length > buf.Length)
+            return null;
+        try
+        {
+            return System.Text.Encoding.Unicode.GetString(buf.Slice(5, length)).Trim();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public static string DescribeUnexpectedReply(ReadOnlySpan<byte> buf)
+    {
+        var hex = Convert.ToHexString(buf[..Math.Min(16, buf.Length)]);
+        if (LooksLikeSerial(buf))
+        {
+            var serial = ParseSerial(buf);
+            return serial is null
+                ? $"sériová odpoveď namiesto media (hex {hex})"
+                : $"sériová odpoveď namiesto media (\"{serial}\", hex {hex})";
+        }
+
+        if (buf.Length >= 2 && buf[0] == 0x24 && buf[1] == 0x2E)
+            return $"neúplná media odpoveď ({buf.Length} B, hex {hex})";
+
+        return $"neznáma odpoveď (hex {hex})";
+    }
 }
 
 public sealed record MediaStatus(int Type, int Max, int Remain, string Name);
