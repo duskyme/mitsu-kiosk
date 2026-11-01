@@ -15,7 +15,9 @@ Class       = USBDevice
 ClassGuid   = {88BAE032-5A81-49f0-BC3D-A4FF138216D6}
 Provider    = %ManufacturerName%
 CatalogFile = CP9550DW-S.cat
-DriverVer   = 11/01/2026,1.0.0.0
+; Bump when DeviceInterfaceGUIDs change so pnputil prefers this package
+; over older store copies that still carry the non-hex c9550dws0001 GUID.
+DriverVer   = 11/01/2026,1.0.1.0
 PnpLockdown = 1
 
 [Manufacturer]

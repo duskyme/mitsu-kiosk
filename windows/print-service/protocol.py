@@ -19,6 +19,8 @@ WINUSB_INTERFACE_GUID = "{D3C9550A-06D3-4A55-9D77-C9550D050001}"
 
 FOOTER_9550S = bytes([0x1B, 0x50, 0x47, 0x00])
 CLEAR_MEMORY_S = bytes([0x1B, 0x5A, 0x43, 0x00])
+# CP-9550DW-S only: must precede job headers (selphy_print).
+START_JOB_S = bytes([0x1B, 0x44, 0x00, 0x00])
 S_INIT = (
     bytes([0x1B, 0x53, 0xC5, 0x9D]),
     bytes([0x1B, 0x4B, 0x7F, 0x00]),
@@ -84,21 +86,31 @@ def build_headers(media: MediaPreset, quality: Quality, copies: int, cut_2x6: bo
     return bytes(hdr1 + hdr2 + hdr3)
 
 
-def split_planar_bgr(rgb_bytes: bytes, cols: int, rows: int) -> tuple[bytes, bytes, bytes]:
-    """rgb_bytes: tightly packed RGB (3 bytes/pixel). Returns B, G, R planes."""
+def split_planar_rgb(rgb_bytes: bytes, cols: int, rows: int) -> tuple[bytes, bytes, bytes]:
+    """rgb_bytes: tightly packed RGB (3 bytes/pixel). Returns R, G, B planes.
+
+    CP-9550 8bpp spool is planar RGB (R then G then B). Packed BGR (plane
+    hdr 0x80) is a different wire format — do not send B,G,R for planar.
+    """
     plane = cols * rows
     if len(rgb_bytes) < plane * 3:
         raise ValueError(f"Need {plane * 3} RGB bytes, got {len(rgb_bytes)}")
-    b = bytearray(plane)
-    g = bytearray(plane)
     r = bytearray(plane)
+    g = bytearray(plane)
+    b = bytearray(plane)
     mv = memoryview(rgb_bytes)
     for i in range(plane):
         o = i * 3
         r[i] = mv[o]
         g[i] = mv[o + 1]
         b[i] = mv[o + 2]
-    return bytes(b), bytes(g), bytes(r)
+    return bytes(r), bytes(g), bytes(b)
+
+
+def split_planar_bgr(rgb_bytes: bytes, cols: int, rows: int) -> tuple[bytes, bytes, bytes]:
+    """Deprecated alias returning (B, G, R). Prefer split_planar_rgb."""
+    r, g, b = split_planar_rgb(rgb_bytes, cols, rows)
+    return b, g, r
 
 
 def _plane_block(plane: bytes, cols: int, rows: int) -> bytes:
@@ -107,12 +119,12 @@ def _plane_block(plane: bytes, cols: int, rows: int) -> bytes:
 
 
 def build_spool(rgb_bytes: bytes, media: MediaPreset, quality: Quality, copies: int = 1) -> bytes:
-    b, g, r = split_planar_bgr(rgb_bytes, media.cols, media.rows)
+    r, g, b = split_planar_rgb(rgb_bytes, media.cols, media.rows)
     return (
         build_headers(media, quality, copies)
-        + _plane_block(b, media.cols, media.rows)
-        + _plane_block(g, media.cols, media.rows)
         + _plane_block(r, media.cols, media.rows)
+        + _plane_block(g, media.cols, media.rows)
+        + _plane_block(b, media.cols, media.rows)
         + FOOTER_9550S
     )
 
@@ -130,6 +142,23 @@ def parse_media_status(buf: bytes) -> dict | None:
         0x05: "CK9523 (6x9)",
     }.get(code, f"Unknown (0x{media_type:02x})")
     return {"type": media_type, "max": maximum, "remain": remain, "name": name}
+
+
+def parse_printer_status(buf: bytes) -> dict | None:
+    """selphy mitsu9550_status: sts1@6, sts3@16, sts5@18."""
+    if len(buf) < 19 or buf[0] != 0x30 or buf[1] != 0x2E:
+        return None
+    sts1, sts3, sts4, sts5 = buf[6], buf[16], buf[17], buf[18]
+    copies = (buf[8] << 8) | buf[9]
+    return {
+        "sts1": sts1,
+        "sts3": sts3,
+        "sts4": sts4,
+        "sts5": sts5,
+        "copies": copies,
+        "idle": sts1 == 0,
+        "ready_for_job": sts5 == 0,
+    }
 
 
 def iter_chunks(data: bytes, size: int = 65536) -> Iterable[bytes]:

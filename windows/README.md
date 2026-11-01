@@ -9,8 +9,9 @@ cd windows\Cp9550Native
 ```
 
 1. Pripoj tlačiareň  
-2. Admin: `.\install.ps1` (alebo Zadig → WinUSB)  
-3. Spusti `CP9550Native.exe`
+2. Admin: `.\install.ps1` (odstráni starý nehex GUID `c9550dws`, nainštaluje WinUSB; alebo Zadig → WinUSB)  
+3. Ak Device Manager ešte ukazuje starý stav: odpoj/zapoj USB a znova Admin `.\install.ps1`  
+4. Spusti `CP9550Native.exe`
 
 ## Prečo nie oficiálny Mitsubishi ovládač?
 

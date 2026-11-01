@@ -129,24 +129,36 @@ export function buildHeaders(options: JobOptions): Uint8Array {
 }
 
 /**
- * Split RGBA/RGB image buffer into planar B, G, R (printer order).
+ * Split RGBA/RGB image buffer into planar R, G, B (CP-9550 8bpp spool order).
  * Expects tightly packed RGB or RGBA rows of exact cols×rows.
+ * Note: packed BGR (plane hdr 0x80) is a different wire format.
  */
+export function splitPlanarRgb(
+  pixels: Uint8ClampedArray | Uint8Array,
+  cols: number,
+  rows: number,
+  channels: 3 | 4,
+): { r: Uint8Array; g: Uint8Array; b: Uint8Array } {
+  const plane = cols * rows
+  const r = new Uint8Array(plane)
+  const g = new Uint8Array(plane)
+  const b = new Uint8Array(plane)
+  for (let i = 0, p = 0; p < plane; p++, i += channels) {
+    r[p] = pixels[i]!
+    g[p] = pixels[i + 1]!
+    b[p] = pixels[i + 2]!
+  }
+  return { r, g, b }
+}
+
+/** @deprecated Use splitPlanarRgb — spool plane order is R,G,B. */
 export function splitPlanarBgr(
   pixels: Uint8ClampedArray | Uint8Array,
   cols: number,
   rows: number,
   channels: 3 | 4,
 ): { b: Uint8Array; g: Uint8Array; r: Uint8Array } {
-  const plane = cols * rows
-  const b = new Uint8Array(plane)
-  const g = new Uint8Array(plane)
-  const r = new Uint8Array(plane)
-  for (let i = 0, p = 0; p < plane; p++, i += channels) {
-    r[p] = pixels[i]!
-    g[p] = pixels[i + 1]!
-    b[p] = pixels[i + 2]!
-  }
+  const { r, g, b } = splitPlanarRgb(pixels, cols, rows, channels)
   return { b, g, r }
 }
 
@@ -188,7 +200,7 @@ export function buildSpool(
 
   if (colorPipeline === 'printer-native') {
     notes.push(
-      'Printer-native color: no ICC / no Gutenprint LUT. Pixels go to the head as 8-bit planar BGR.',
+      'Printer-native color: no ICC / no Gutenprint LUT. Pixels go to the head as 8-bit planar RGB.',
     )
   } else {
     notes.push('sRGB identity: values are sent as-is; calibrate externally if needed.')
@@ -199,24 +211,24 @@ export function buildSpool(
   )
   notes.push('CP-9550DW-S does not use header 4; footer is 1B 50 47 00.')
 
-  const { b, g, r } = splitPlanarBgr(pixels, media.cols, media.rows, channels)
+  const { r, g, b } = splitPlanarRgb(pixels, media.cols, media.rows, channels)
   const headers = buildHeaders(options)
-  const planeB = planeBlock(b, media.cols, media.rows)
-  const planeG = planeBlock(g, media.cols, media.rows)
   const planeR = planeBlock(r, media.cols, media.rows)
+  const planeG = planeBlock(g, media.cols, media.rows)
+  const planeB = planeBlock(b, media.cols, media.rows)
 
   const total =
-    headers.length + planeB.length + planeG.length + planeR.length + FOOTER_9550S.length
+    headers.length + planeR.length + planeG.length + planeB.length + FOOTER_9550S.length
   const bytes = new Uint8Array(total)
   let o = 0
   bytes.set(headers, o)
   o += headers.length
-  bytes.set(planeB, o)
-  o += planeB.length
-  bytes.set(planeG, o)
-  o += planeG.length
   bytes.set(planeR, o)
   o += planeR.length
+  bytes.set(planeG, o)
+  o += planeG.length
+  bytes.set(planeB, o)
+  o += planeB.length
   bytes.set(FOOTER_9550S, o)
 
   return {

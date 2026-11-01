@@ -113,28 +113,33 @@ public partial class MainWindow : Window
         }
     }
 
-    private byte[] BuildSpoolBytes()
+    /// <summary>
+    /// Snapshot UI-bound options on the dispatcher thread before any Task.Run work.
+    /// ComboBox/TextBox must not be read from a background thread.
+    /// </summary>
+    private (string Path, MediaPreset Media, QualityMode Quality, int Copies, FitMode Fit) CaptureJobArgs()
     {
         if (_photoPath is null)
             throw new InvalidOperationException("Najprv vyber fotografiu.");
-        return ImageRasterizer.BuildJob(
-            _photoPath,
-            SelectedMedia(),
-            SelectedQuality(),
-            SelectedCopies(),
-            SelectedFit());
+        return (_photoPath, SelectedMedia(), SelectedQuality(), SelectedCopies(), SelectedFit());
     }
+
+    private static byte[] BuildSpoolBytes(
+        string path, MediaPreset media, QualityMode quality, int copies, FitMode fit) =>
+        ImageRasterizer.BuildJob(path, media, quality, copies, fit);
 
     private async void OnSaveSpool(object sender, RoutedEventArgs e)
     {
         try
         {
+            var job = CaptureJobArgs();
             StatusText.Text = "Skladám spool…";
-            _spool = await Task.Run(BuildSpoolBytes);
+            _spool = await Task.Run(() =>
+                BuildSpoolBytes(job.Path, job.Media, job.Quality, job.Copies, job.Fit));
             var dlg = new SaveFileDialog
             {
                 Filter = "CP9550S spool|*.mitsu9550s",
-                FileName = Path.GetFileNameWithoutExtension(_photoPath) + ".mitsu9550s",
+                FileName = Path.GetFileNameWithoutExtension(job.Path) + ".mitsu9550s",
             };
             if (dlg.ShowDialog() == true)
             {
@@ -156,21 +161,26 @@ public partial class MainWindow : Window
         Progress.Value = 0;
         try
         {
+            var job = CaptureJobArgs();
             StatusText.Text = "Rasterizujem na natívne pixely…";
-            _spool = await Task.Run(BuildSpoolBytes);
-            StatusText.Text = $"Spool {_spool.Length:N0} B — posielam cez USB…";
+            _spool = await Task.Run(() =>
+                BuildSpoolBytes(job.Path, job.Media, job.Quality, job.Copies, job.Fit));
+            StatusText.Text = $"Spool {_spool.Length:N0} B — handshake / čakám ready…";
 
+            // Progress<T> captures the UI SynchronizationContext when created here.
             var progress = new Progress<double>(p =>
             {
                 Progress.Value = p;
-                StatusText.Text = $"USB prenos {p:0.0}%";
+                StatusText.Text = $"USB prenos dát {p:0.0}%";
             });
 
+            var spool = _spool;
             await Task.Run(() =>
             {
                 using var prn = PrinterDevice.Open();
-                prn.SendSpool(_spool, progress);
-                prn.WaitIdle();
+                prn.SendSpool(spool, progress);
+                // sts1==0 means print finished (not sts5 — that is "ready for next job").
+                prn.WaitPrintComplete();
             });
 
             Progress.Value = 100;
