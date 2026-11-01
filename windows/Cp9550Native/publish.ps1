@@ -15,6 +15,7 @@ dotnet publish "$root\Cp9550Native.App\Cp9550Native.App.csproj" `
   -p:IncludeNativeLibrariesForSelfExtract=true `
   -o "$root\dist"
 
-Write-Host "`nOutput: $root\dist\CP9550Native.exe" -ForegroundColor Yellow
-Write-Host "One-time WinUSB: run $root\..\install.ps1 as Administrator (or use Zadig)."
-Write-Host "Then launch CP9550Native.exe — no Python required."
+Write-Host ''
+Write-Host "Output: $root\dist\CP9550Native.exe" -ForegroundColor Yellow
+Write-Host 'One-time WinUSB: run ..\install.ps1 as Administrator (or use Zadig).'
+Write-Host 'Then launch CP9550Native.exe - no Python required.'
