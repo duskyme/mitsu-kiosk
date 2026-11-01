@@ -33,9 +33,13 @@ dotnet run --project ..\Cp9550Native\Cp9550SpoolBridge -- --dry-run --spool-file
 ```powershell
 # Admin — Inf2Cat + SignTool + pnputil + Add-PrinterDriver + queue + ICC
 .\install-printer.ps1 -Sign
+
+# Force delete + re-add when pnputil returns 259 (identical package already present)
+.\install-printer.ps1 -Sign -ForceReplace
 ```
 
-Requires `testsigning` on **or** a trusted WDK/test cert (this lab used `WDKTestCert` in CurrentUser\My + LocalMachine Root/TrustedPublisher).
+Requires a trusted WDK/test cert (`WDKTestCert` in CurrentUser\My **and** LocalMachine Root + TrustedPublisher), **or** `testsigning` on.  
+`pnputil` exit **259** with `Added driver packages: 0` means the package is **already** in DriverStore — the script treats that as OK and refreshes `Add-PrinterDriver` (not a signing failure).
 
 ## ICC (S3)
 
@@ -64,3 +68,4 @@ Installed association file: `%SystemRoot%\System32\spool\drivers\color\CP9550_ac
 - Pipeline file must be named `CP9550-pipelineconfig.xml` (stem of `DataFile`).
 - Do **not** put IHV filter DLLs in V4 `RequiredFiles` (those resolve from core packages only → event 235). Ship `Cp9550RenderFilter.dll` via INF `CopyFiles` / `DriverFiles` and reference it only from the pipeline XML. `XpsRasterService.dll` is a `FilterServiceProvider`, not a RequiredFiles entry.
 - Pipeline XML comments must not contain `--` (illegal in XML). That made `CP9550-pipelineconfig.xml` unparsable and caused PrintService event 372 / `0x80004005` before `InitializeFilter`.
+- Lab verify (0.3.10): filter log reaches `InitializeFilter enter`. A later `FixedPageToXpsOMPage` `0x8052000C` is a separate XPS OM issue (not the pre-init 372).
