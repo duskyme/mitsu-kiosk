@@ -16,6 +16,11 @@ __pycache__/
 *.pyc
 *.mitsu9550s
 agent-tools/
+windows/Cp9550Native/**/bin/
+windows/Cp9550Native/**/obj/
+windows/Cp9550Native/dist/
+*.user
+*.suo
 
 # Editor directories and files
 .vscode/*
