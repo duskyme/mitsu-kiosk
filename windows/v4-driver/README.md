@@ -68,4 +68,5 @@ Installed association file: `%SystemRoot%\System32\spool\drivers\color\CP9550_ac
 - Pipeline file must be named `CP9550-pipelineconfig.xml` (stem of `DataFile`).
 - Do **not** put IHV filter DLLs in V4 `RequiredFiles` (those resolve from core packages only → event 235). Ship `Cp9550RenderFilter.dll` via INF `CopyFiles` / `DriverFiles` and reference it only from the pipeline XML. `XpsRasterService.dll` is a `FilterServiceProvider`, not a RequiredFiles entry.
 - Pipeline XML comments must not contain `--` (illegal in XML). That made `CP9550-pipelineconfig.xml` unparsable and caused PrintService event 372 / `0x80004005` before `InitializeFilter`.
-- Lab verify (0.3.10): filter log reaches `InitializeFilter enter`. A later `FixedPageToXpsOMPage` `0x8052000C` is a separate XPS OM issue (not the pre-init 372).
+- Lab verify (0.3.10): filter log reaches `InitializeFilter enter`.
+- `FixedPageToXpsOMPage` `0x8052000C` (`XPS_E_INVALID_MARKUP`) = OpenXPS page fed to classic `CreatePageFromStream`. Fixed in **0.3.11**: `IXpsOMObjectFactory1::CreatePageFromStream1` + manifest `XpsFormat=XPS,OpenXPS` (MSXPS preferred for GDI/MXDC).

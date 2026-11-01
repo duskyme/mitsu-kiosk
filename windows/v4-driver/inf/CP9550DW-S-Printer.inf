@@ -12,6 +12,8 @@
 ;   (core-package resolution only -> PrintService event 235).
 ; - Pipeline XML comments must not contain "--" (invalid XML -> event 372 / 0x80004005
 ;   before Cp9550RenderFilter::InitializeFilter).
+; - Prefer XpsFormat=XPS,OpenXPS; filter uses CreatePageFromStream1 (OpenXPS-safe).
+;   OpenXPS-only + classic CreatePageFromStream -> XPS_E_INVALID_MARKUP 0x8052000C.
 
 [Version]
 Signature   = "$Windows NT$"
@@ -20,7 +22,7 @@ Class       = Printer
 ClassGUID   = {4D36E979-E325-11CE-BFC1-08002BE10318}
 CatalogFile = CP9550DW-S-Printer.cat
 ClassVer    = 4.0
-DriverVer   = 11/01/2026,0.3.10.0
+DriverVer   = 11/01/2026,0.3.11.0
 PnpLockdown = 1
 
 [Manufacturer]
