@@ -1,0 +1,4 @@
+LIBRARY Cp9550RenderFilter
+EXPORTS
+    DllCanUnloadNow PRIVATE
+    DllGetClassObject PRIVATE

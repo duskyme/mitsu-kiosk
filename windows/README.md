@@ -20,13 +20,19 @@ cd windows\Cp9550Native
 | CP-9550DW (retail) | `03A1` | CPD9550V |
 | **CP-9550DW-S (kiosk)** | **`03A5`** | **žiadny** |
 
-## V4 hybrid spike (Print dialog path)
+## V4 hybrid (Print dialog path — Phase 1)
 
 ```powershell
-# Bridge: TCP 127.0.0.1:9100 → SendSpool
-dotnet run --project Cp9550Native\Cp9550SpoolBridge -- --port 9100 --dry-run
+# Build XPS → spool filter + offline spooltool
+cd v4-driver\filter
+.\build.ps1
 
-# Queue stubs + ICC: see v4-driver\README.md
+# Bridge: TCP 127.0.0.1:9100 → SendSpool
+cd ..\..\Cp9550Native
+dotnet run --project Cp9550SpoolBridge -- --port 9100 --dry-run
+
+# Queue + ICC: see v4-driver\README.md (install-printer.ps1)
+# Offline spool without queue: v4-driver\filter\README.md
 ```
 
 

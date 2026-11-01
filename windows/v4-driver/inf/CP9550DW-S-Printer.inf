@@ -1,12 +1,15 @@
-; V4 print class driver package (SPIKE stubs) for Mitsubishi CP-9550DW-S
+; Printer package for Mitsubishi CP-9550DW-S (Phase 1)
 ;
 ; This is NOT the WinUSB device INF (see windows\inf\CP9550DW-S.inf).
-; Queue should use a Standard TCP/IP Port → 127.0.0.1:9100 (RAW) where
+; Queue uses Standard TCP/IP Port â†’ 127.0.0.1:9100 (RAW) where
 ; Cp9550SpoolBridge listens and calls PrinterDevice.SendSpool.
 ;
-; Spike status: GPD/manifest/INF + ICC CopyFiles are present.
-; IHV XPS render filter DLL is NOT built yet — see filter/README.md.
-; Do not expect full XPS→spool conversion until Phase 1.
+; Lab notes:
+; - ClassVer=4.0 + DestDir 13 + PackageAware works for queue + ICC soft-proof.
+; - GPD MUST include CmdCR/CmdLF/CmdFF/CmdSendBlockData or Add-Printer returns 0x800703eb.
+; - Pipeline file name must be <DataFileStem>-pipelineconfig.xml â†’ CP9550-pipelineconfig.xml.
+; - IHV filter DLL ships in DriverFiles (CopyFiles). Never put it in manifest RequiredFiles
+;   (core-package resolution only â†’ PrintService event 235).
 
 [Version]
 Signature   = "$Windows NT$"
@@ -15,7 +18,7 @@ Class       = Printer
 ClassGUID   = {4D36E979-E325-11CE-BFC1-08002BE10318}
 CatalogFile = CP9550DW-S-Printer.cat
 ClassVer    = 4.0
-DriverVer   = 11/01/2026,0.1.0.0
+DriverVer   = 11/01/2026,0.3.9.0
 PnpLockdown = 1
 
 [Manufacturer]
@@ -27,33 +30,42 @@ PnpLockdown = 1
 [Install]
 CopyFiles = DriverFiles, ColorFiles
 
+[Install.Services]
+AddService = , %SPSVCINST_ASSOCSERVICE%
+
 [DriverFiles]
 CP9550.gpd
 CP9550-manifest.ini
-cp9550-pipelineconfig.xml
+CP9550-pipelineconfig.xml
+Cp9550RenderFilter.dll
 
 [ColorFiles]
 CP955_01.ICC
 
 [DestinationDirs]
-DefaultDestDir = 66000
+DefaultDestDir = 13
 ColorFiles     = 66003
 
 ; Prefer install-printer.ps1 which stages a flat package next to the INF.
-; Source layout below matches the repo tree when the INF is invoked from
-; windows/v4-driver/ via a custom Destination (advanced); day-to-day use the stage.
 [SourceDisksNames.amd64]
 1 = %Location%,,,
 2 = %Location%,,,color
 3 = %Location%,,,gpd
 4 = %Location%,,,pipeline
+5 = %Location%,,,filter\_out\Release
 
 [SourceDisksFiles]
 CP9550.gpd = 3
 CP9550-manifest.ini = 1
-cp9550-pipelineconfig.xml = 4
+CP9550-pipelineconfig.xml = 4
+Cp9550RenderFilter.dll = 5
 CP955_01.ICC = 2
+
+[PrinterPackageInstallation.amd64]
+PackageAware = TRUE
 
 [Strings]
 ManufacturerName = "CP9550 Native (community)"
-Location         = "CP-9550 V4 spike package"
+Location         = "CP-9550 V4 Phase 1 package"
+SPSVCINST_ASSOCSERVICE = 0x00000002
+
