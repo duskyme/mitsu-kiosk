@@ -63,3 +63,4 @@ Installed association file: `%SystemRoot%\System32\spool\drivers\color\CP9550_ac
 - GPD must include `CmdCR` / `CmdLF` / `CmdFF` / `CmdSendBlockData` or `Add-Printer` fails with `0x800703eb`.
 - Pipeline file must be named `CP9550-pipelineconfig.xml` (stem of `DataFile`).
 - Do **not** put IHV filter DLLs in V4 `RequiredFiles` (those resolve from core packages only → event 235). Ship `Cp9550RenderFilter.dll` via INF `CopyFiles` / `DriverFiles` and reference it only from the pipeline XML. `XpsRasterService.dll` is a `FilterServiceProvider`, not a RequiredFiles entry.
+- Pipeline XML comments must not contain `--` (illegal in XML). That made `CP9550-pipelineconfig.xml` unparsable and caused PrintService event 372 / `0x80004005` before `InitializeFilter`.

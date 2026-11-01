@@ -9,7 +9,9 @@
 ; - GPD MUST include CmdCR/CmdLF/CmdFF/CmdSendBlockData or Add-Printer returns 0x800703eb.
 ; - Pipeline file name must be <DataFileStem>-pipelineconfig.xml â†’ CP9550-pipelineconfig.xml.
 ; - IHV filter DLL ships in DriverFiles (CopyFiles). Never put it in manifest RequiredFiles
-;   (core-package resolution only â†’ PrintService event 235).
+;   (core-package resolution only -> PrintService event 235).
+; - Pipeline XML comments must not contain "--" (invalid XML -> event 372 / 0x80004005
+;   before Cp9550RenderFilter::InitializeFilter).
 
 [Version]
 Signature   = "$Windows NT$"
@@ -18,7 +20,7 @@ Class       = Printer
 ClassGUID   = {4D36E979-E325-11CE-BFC1-08002BE10318}
 CatalogFile = CP9550DW-S-Printer.cat
 ClassVer    = 4.0
-DriverVer   = 11/01/2026,0.3.9.0
+DriverVer   = 11/01/2026,0.3.10.0
 PnpLockdown = 1
 
 [Manufacturer]
