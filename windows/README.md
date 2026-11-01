@@ -20,6 +20,16 @@ cd windows\Cp9550Native
 | CP-9550DW (retail) | `03A1` | CPD9550V |
 | **CP-9550DW-S (kiosk)** | **`03A5`** | **žiadny** |
 
+## V4 hybrid spike (Print dialog path)
+
+```powershell
+# Bridge: TCP 127.0.0.1:9100 → SendSpool
+dotnet run --project Cp9550Native\Cp9550SpoolBridge -- --port 9100 --dry-run
+
+# Queue stubs + ICC: see v4-driver\README.md
+```
+
+
 ## Alternatíva: Python CLI
 
 Stále v `print-service/` — rovnaký protokol, bez GUI.

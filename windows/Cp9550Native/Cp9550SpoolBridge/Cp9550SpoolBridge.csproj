@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Cp9550SpoolBridge</AssemblyName>
+    <RootNamespace>Cp9550SpoolBridge</RootNamespace>
+    <Product>CP-9550 Spool Bridge</Product>
+    <Description>Localhost TCP raw spool bridge that reuses PrinterDevice.SendSpool</Description>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cp9550Native.Core\Cp9550Native.Core.csproj" />
+  </ItemGroup>
+</Project>

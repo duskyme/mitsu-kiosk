@@ -1,0 +1,59 @@
+; V4 print class driver package (SPIKE stubs) for Mitsubishi CP-9550DW-S
+;
+; This is NOT the WinUSB device INF (see windows\inf\CP9550DW-S.inf).
+; Queue should use a Standard TCP/IP Port → 127.0.0.1:9100 (RAW) where
+; Cp9550SpoolBridge listens and calls PrinterDevice.SendSpool.
+;
+; Spike status: GPD/manifest/INF + ICC CopyFiles are present.
+; IHV XPS render filter DLL is NOT built yet — see filter/README.md.
+; Do not expect full XPS→spool conversion until Phase 1.
+
+[Version]
+Signature   = "$Windows NT$"
+Provider    = %ManufacturerName%
+Class       = Printer
+ClassGUID   = {4D36E979-E325-11CE-BFC1-08002BE10318}
+CatalogFile = CP9550DW-S-Printer.cat
+ClassVer    = 4.0
+DriverVer   = 11/01/2026,0.1.0.0
+PnpLockdown = 1
+
+[Manufacturer]
+%ManufacturerName% = Standard,NTamd64
+
+[Standard.NTamd64]
+"Mitsubishi CP-9550DW-S (V4)" = Install, {A55C9550-06D3-4A55-9D77-C9550D0500A1}
+
+[Install]
+CopyFiles = DriverFiles, ColorFiles
+
+[DriverFiles]
+CP9550.gpd
+CP9550-manifest.ini
+cp9550-pipelineconfig.xml
+
+[ColorFiles]
+CP955_01.ICC
+
+[DestinationDirs]
+DefaultDestDir = 66000
+ColorFiles     = 66003
+
+; Prefer install-printer.ps1 which stages a flat package next to the INF.
+; Source layout below matches the repo tree when the INF is invoked from
+; windows/v4-driver/ via a custom Destination (advanced); day-to-day use the stage.
+[SourceDisksNames.amd64]
+1 = %Location%,,,
+2 = %Location%,,,color
+3 = %Location%,,,gpd
+4 = %Location%,,,pipeline
+
+[SourceDisksFiles]
+CP9550.gpd = 3
+CP9550-manifest.ini = 1
+cp9550-pipelineconfig.xml = 4
+CP955_01.ICC = 2
+
+[Strings]
+ManufacturerName = "CP9550 Native (community)"
+Location         = "CP-9550 V4 spike package"

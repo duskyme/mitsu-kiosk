@@ -1,0 +1,59 @@
+*%
+*% CP-9550DW-S V4 GPD spike — 4×6 only; expand after S1–S3 gate.
+*% Exact dye-sub pixels: 2152×1416 (do not invent letter pages).
+*%
+
+*GPDFileName: "CP9550.gpd"
+*Include: "MsXpsInc.gpd"
+*ResourceDLL: "unires.dll"
+
+*ModelName: "Mitsubishi CP-9550DW-S (V4)"
+
+*PrintSchemaKeywordMap: "PageMediaSize"
+*Feature: PaperSize
+{
+  *rcNameID: =PAPER_SIZE_DISPLAY
+  *DefaultOption: PHOTO_4x6
+  *Option: PHOTO_4x6
+  {
+    *rcNameID: =LETTER4X6_DISPLAY
+    *PrintSchemaKeywordMap: "NorthAmerica4x6"
+    *PageDimensions: PAIR(2152, 1416)
+    *PrintableArea: PAIR(2152, 1416)
+    *PrintableOrigin: PAIR(0, 0)
+  }
+}
+
+*PrintSchemaKeywordMap: "PageOutputQuality"
+*Feature: Quality
+{
+  *rcNameID: =QUALITY_DISPLAY
+  *DefaultOption: SuperFine
+  *Option: Fine
+  {
+    *rcNameID: =OPTION_QUALITY_NORMAL
+    *PrintSchemaKeywordMap: "Normal"
+  }
+  *Option: SuperFine
+  {
+    *rcNameID: =OPTION_QUALITY_HIGH
+    *PrintSchemaKeywordMap: "High"
+  }
+  *Option: FineDeep
+  {
+    *rcNameID: =OPTION_QUALITY_ENHANCED
+    *PrintSchemaKeywordMap: "Photographic"
+  }
+}
+
+*Feature: ColorMode
+{
+  *rcNameID: =COLOR_DISPLAY
+  *DefaultOption: Color
+  *Option: Color
+  {
+    *rcNameID: =COLOR_COLOR
+    *PrintSchemaKeywordMap: "Color"
+    *devmode: *Color
+  }
+}
