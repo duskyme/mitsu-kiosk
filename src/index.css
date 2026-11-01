@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Syne", "Segoe UI", sans-serif;
+  --font-body: "Manrope", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --color-ink: #0c0e11;
+  --color-panel: #151a21;
+  --color-panel-2: #1c232d;
+  --color-line: #2a3442;
+  --color-mute: #8b97a8;
+  --color-paper: #f2efe8;
+  --color-accent: #e8a54b;
+  --color-accent-2: #5ec8c0;
+  --color-danger: #e26d5a;
+  --color-ok: #6fbf7a;
+}
+
+@font-face {
+  font-family: "Syne";
+  font-style: normal;
+  font-weight: 600 800;
+  font-display: swap;
+  src: url("https://fonts.gstatic.com/s/syne/v22/8vIS7w4qmoVsOYZ2msqTP3RK.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("https://fonts.gstatic.com/s/manrope/v15/xn7_YHE41ni1AdIRggdxSotrDF39rj6sqw.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url("https://fonts.gstatic.com/s/ibmplexmono/v19/-F6qfjptAgt5VM-kVkqdyU8n3twJwlBFgg.woff2") format("woff2");
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--color-paper);
+  font-family: var(--font-body);
+  background:
+    radial-gradient(1200px 700px at 12% -10%, rgba(232, 165, 75, 0.18), transparent 55%),
+    radial-gradient(900px 600px at 100% 0%, rgba(94, 200, 192, 0.12), transparent 50%),
+    linear-gradient(165deg, #090b0e 0%, #12171e 48%, #0c1015 100%);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: rgba(232, 165, 75, 0.35);
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(232, 165, 75, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(232, 165, 75, 0);
+  }
+}
+
+.rise {
+  animation: rise-in 0.55s ease both;
+}
+
+.rise-delay-1 {
+  animation-delay: 0.08s;
+}
+
+.rise-delay-2 {
+  animation-delay: 0.16s;
+}
+
+.rise-delay-3 {
+  animation-delay: 0.24s;
+}
+
+.dropzone-active {
+  animation: pulse-ring 1.4s ease infinite;
+}
