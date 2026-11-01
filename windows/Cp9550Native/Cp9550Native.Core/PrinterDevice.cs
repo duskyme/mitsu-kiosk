@@ -1,4 +1,5 @@
 using LibUsbDotNet;
+using LibUsbDotNet.Info;
 using LibUsbDotNet.Main;
 
 namespace Cp9550Native.Core;
@@ -19,13 +20,22 @@ public sealed class PrinterDevice : IDisposable
     private readonly UsbDevice _device;
     private readonly UsbEndpointWriter _writer;
     private readonly UsbEndpointReader _reader;
+    private readonly byte _outEndpoint;
+    private readonly byte _inEndpoint;
     private bool _disposed;
 
-    private PrinterDevice(UsbDevice device, UsbEndpointWriter writer, UsbEndpointReader reader)
+    private PrinterDevice(
+        UsbDevice device,
+        UsbEndpointWriter writer,
+        UsbEndpointReader reader,
+        byte outEndpoint,
+        byte inEndpoint)
     {
         _device = device;
         _writer = writer;
         _reader = reader;
+        _outEndpoint = outEndpoint;
+        _inEndpoint = inEndpoint;
     }
 
     public static bool IsPresent()
@@ -67,63 +77,86 @@ public sealed class PrinterDevice : IDisposable
             throw new InvalidOperationException(
                 "CP-9550DW-S nenájdená (USB 06D3:03A5). Nainštaluj WinUSB INF alebo Zadig.");
 
-        if (device is IUsbDevice whole)
+        try
         {
-            whole.SetConfiguration(1);
-            whole.ClaimInterface(0);
-        }
+            if (device is IUsbDevice whole)
+            {
+                whole.SetConfiguration(1);
+                whole.ClaimInterface(0);
+            }
 
-        // Prefer first bulk OUT / bulk IN on the active config.
-        UsbEndpointWriter? writer = null;
-        UsbEndpointReader? reader = null;
-        foreach (var candidate in new[]
-                 {
-                     WriteEndpointID.Ep01, WriteEndpointID.Ep02, WriteEndpointID.Ep03, WriteEndpointID.Ep04,
-                 })
+            // CP-9550DW-S exposes bulk OUT 0x01 + bulk IN 0x82 (not 0x81).
+            // OpenEndpointReader(Ep01) returns non-null even when that pipe does not
+            // exist, so we must pick endpoints from descriptors — same as device.py.
+            if (!TryFindBulkEndpoints(device, out var outEp, out var inEp))
+            {
+                device.Close();
+                throw new InvalidOperationException(
+                    "Bulk endpointy sa nenašli v USB deskriptoroch CP-9550DW-S.");
+            }
+
+            var writer = device.OpenEndpointWriter((WriteEndpointID)outEp, EndpointType.Bulk);
+            var reader = device.OpenEndpointReader((ReadEndpointID)inEp, 4096, EndpointType.Bulk);
+            if (writer is null || reader is null)
+            {
+                device.Close();
+                throw new InvalidOperationException(
+                    $"Bulk endpointy 0x{outEp:X2}/0x{inEp:X2} sa nepodarilo otvoriť.");
+            }
+
+            return new PrinterDevice(device, writer, reader, outEp, inEp);
+        }
+        catch
         {
-            try
-            {
-                writer = device.OpenEndpointWriter(candidate);
-                if (writer is not null)
-                    break;
-            }
-            catch
-            {
-                // try next
-            }
+            try { device.Close(); } catch { /* ignore */ }
+            throw;
         }
-
-        foreach (var candidate in new[]
-                 {
-                     ReadEndpointID.Ep01, ReadEndpointID.Ep02, ReadEndpointID.Ep03, ReadEndpointID.Ep04,
-                 })
-        {
-            try
-            {
-                reader = device.OpenEndpointReader(candidate);
-                if (reader is not null)
-                    break;
-            }
-            catch
-            {
-                // try next
-            }
-        }
-
-        if (writer is null || reader is null)
-        {
-            device.Close();
-            throw new InvalidOperationException("Bulk endpointy sa nepodarilo otvoriť.");
-        }
-
-        return new PrinterDevice(device, writer, reader);
     }
+
+    /// <summary>
+    /// First bulk OUT / bulk IN on interface 0 of the active configuration.
+    /// </summary>
+    internal static bool TryFindBulkEndpoints(UsbDevice device, out byte outEndpoint, out byte inEndpoint)
+    {
+        outEndpoint = 0;
+        inEndpoint = 0;
+        foreach (UsbConfigInfo cfg in device.Configs)
+        {
+            foreach (UsbInterfaceInfo iface in cfg.InterfaceInfoList)
+            {
+                foreach (UsbEndpointInfo ep in iface.EndpointInfoList)
+                {
+                    var d = ep.Descriptor;
+                    if ((d.Attributes & 0x03) != 0x02)
+                        continue; // not bulk
+                    if ((d.EndpointID & 0x80) != 0)
+                    {
+                        if (inEndpoint == 0)
+                            inEndpoint = d.EndpointID;
+                    }
+                    else if (outEndpoint == 0)
+                    {
+                        outEndpoint = d.EndpointID;
+                    }
+                }
+            }
+        }
+
+        return outEndpoint != 0 && inEndpoint != 0;
+    }
+
+    private static string UsbErrorDetail(ErrorCode ec) =>
+        ec == ErrorCode.None
+            ? ""
+            : $" ({ec}, Win32/LibUsb: {UsbDevice.LastErrorNumber} {UsbDevice.LastErrorString})";
 
     public void Write(byte[] data, int timeoutMs = 15000)
     {
         var ec = _writer.Write(data, timeoutMs, out var transferred);
         if (ec != ErrorCode.None || transferred != data.Length)
-            throw new IOException($"USB write failed: {ec} ({transferred}/{data.Length})");
+            throw new IOException(
+                $"USB write failed on EP 0x{_outEndpoint:X2}: {ec} " +
+                $"({transferred}/{data.Length}){UsbErrorDetail(ec)}");
     }
 
     public byte[] Read(int size = 128, int timeoutMs = 5000)
@@ -131,7 +164,8 @@ public sealed class PrinterDevice : IDisposable
         var buf = new byte[size];
         var ec = _reader.Read(buf, timeoutMs, out var transferred);
         if (ec != ErrorCode.None && ec != ErrorCode.IoTimedOut)
-            throw new IOException($"USB read failed: {ec}");
+            throw new IOException(
+                $"USB read failed on EP 0x{_inEndpoint:X2}: {ec}{UsbErrorDetail(ec)}");
         if (transferred <= 0)
             return Array.Empty<byte>();
         if (transferred == buf.Length)

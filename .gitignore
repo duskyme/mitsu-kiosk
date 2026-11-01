@@ -19,6 +19,8 @@ agent-tools/
 windows/Cp9550Native/**/bin/
 windows/Cp9550Native/**/obj/
 windows/Cp9550Native/dist/
+windows/Cp9550Native/_diag/
+windows/Cp9550Native/_smoke/
 *.user
 *.suo
 
