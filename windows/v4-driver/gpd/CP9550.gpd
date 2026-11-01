@@ -1,59 +1,88 @@
 *%
-*% CP-9550DW-S V4 GPD spike — 4×6 only; expand after S1–S3 gate.
-*% Exact dye-sub pixels: 2152×1416 (do not invent letter pages).
+*% CP-9550DW-S printer GPD — Phase 1.
+*% Shape follows Microsoft MSxpsXPS.gpd (required cursor cmds). Dye-sub 4×6 added.
+*% Native pixels 2152×1416 are produced by Cp9550RenderFilter, not GPD DPI.
 *%
 
-*GPDFileName: "CP9550.gpd"
-*Include: "MsXpsInc.gpd"
-*ResourceDLL: "unires.dll"
+*GPDSpecVersion: "1.0"
+*GPDFileVersion: "1.0"
 
-*ModelName: "Mitsubishi CP-9550DW-S (V4)"
+*Include:        "StdNames.gpd"
+*Include:        "MsXpsInc.gpd"
+*ResourceDLL:    "unires.dll"
 
-*PrintSchemaKeywordMap: "PageMediaSize"
+*GPDFileName:    "CP9550.gpd"
+*ModelName:      "Mitsubishi CP-9550DW-S (V4)"
+*MasterUnits:    PAIR(1200, 1200)
+*PrinterType:    PAGE
+*MaxCopies:      680
+
+*Feature: Orientation
+{
+    *rcNameID: =ORIENTATION_DISPLAY
+    *DefaultOption: LANDSCAPE_CC270
+
+    *Option: PORTRAIT
+    {
+        *rcNameID: =PORTRAIT_DISPLAY
+    }
+
+    *Option: LANDSCAPE_CC270
+    {
+        *rcNameID: =LANDSCAPE_DISPLAY
+    }
+}
+
+*Feature: Resolution
+{
+    *rcNameID: =RESOLUTION_DISPLAY
+    *DefaultOption: DPI300
+
+    *Option: DPI300
+    {
+        *Name: "300x300 " =DOTS_PER_INCH
+        *DPI: PAIR(300, 300)
+        *TextDPI: PAIR(300, 300)
+        *SpotDiameter: 100
+    }
+}
+
+*% 4×6" @ 1200 master units/inch = 4800 × 7200. Keep LETTER as fallback for queue bring-up.
 *Feature: PaperSize
 {
-  *rcNameID: =PAPER_SIZE_DISPLAY
-  *DefaultOption: PHOTO_4x6
-  *Option: PHOTO_4x6
-  {
-    *rcNameID: =LETTER4X6_DISPLAY
-    *PrintSchemaKeywordMap: "NorthAmerica4x6"
-    *PageDimensions: PAIR(2152, 1416)
-    *PrintableArea: PAIR(2152, 1416)
-    *PrintableOrigin: PAIR(0, 0)
-  }
+    *rcNameID: =PAPER_SIZE_DISPLAY
+    *DefaultOption: PHOTO_4x6
+
+    *Option: PHOTO_4x6
+    {
+        *Name: "4 x 6 in"
+        *PrintSchemaKeywordMap: "NorthAmerica4x6"
+        *PageDimensions: PAIR(4800, 7200)
+        *PrintableOrigin: PAIR(0, 0)
+        *PrintableArea: PAIR(4800, 7200)
+    }
+
+    *Option: LETTER
+    {
+        *rcNameID: =RCID_DMPAPER_SYSTEM_NAME
+        *PrintableOrigin: PAIR(600, 600)
+        *PrintableArea: PAIR(9000, 12000)
+    }
 }
 
-*PrintSchemaKeywordMap: "PageOutputQuality"
-*Feature: Quality
+*Feature: MediaType
 {
-  *rcNameID: =QUALITY_DISPLAY
-  *DefaultOption: SuperFine
-  *Option: Fine
-  {
-    *rcNameID: =OPTION_QUALITY_NORMAL
-    *PrintSchemaKeywordMap: "Normal"
-  }
-  *Option: SuperFine
-  {
-    *rcNameID: =OPTION_QUALITY_HIGH
-    *PrintSchemaKeywordMap: "High"
-  }
-  *Option: FineDeep
-  {
-    *rcNameID: =OPTION_QUALITY_ENHANCED
-    *PrintSchemaKeywordMap: "Photographic"
-  }
+    *rcNameID: =MEDIA_TYPE_DISPLAY
+    *DefaultOption: STANDARD
+
+    *Option: STANDARD
+    {
+        *rcNameID: =PLAIN_PAPER_DISPLAY
+    }
 }
 
-*Feature: ColorMode
-{
-  *rcNameID: =COLOR_DISPLAY
-  *DefaultOption: Color
-  *Option: Color
-  {
-    *rcNameID: =COLOR_COLOR
-    *PrintSchemaKeywordMap: "Color"
-    *devmode: *Color
-  }
-}
+*% Mandatory cursor commands (missing these → Add-Printer ERROR_CAN_NOT_COMPLETE 0x800703eb)
+*Command: CmdCR { *Cmd : "" }
+*Command: CmdLF { *Cmd : "" }
+*Command: CmdFF { *Cmd : "" }
+*Command: CmdSendBlockData { *Cmd : "" }

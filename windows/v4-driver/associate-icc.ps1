@@ -67,10 +67,20 @@ $meta = Join-Path $user "calibration.json"
 
 New-Item -ItemType Directory -Force -Path $root, $user, $uploads | Out-Null
 
-if (-not (Test-Path -LiteralPath $base)) {
-    Copy-Item -LiteralPath $PackageIcc -Destination $base
+# Always refresh immutable base from the package when the package copy is present
+# and larger than a stub (lab spikes left 128-byte placeholders in ProgramData).
+$needBase = -not (Test-Path -LiteralPath $base)
+if (-not $needBase) {
+    $needBase = ((Get-Item -LiteralPath $base).Length -lt 1024) -or
+                ((Get-Item -LiteralPath $PackageIcc).Length -ne (Get-Item -LiteralPath $base).Length)
+}
+if ($needBase) {
+    if (Test-Path -LiteralPath $base) {
+        try { (Get-Item $base).IsReadOnly = $false } catch { }
+    }
+    Copy-Item -LiteralPath $PackageIcc -Destination $base -Force
     try { (Get-Item $base).IsReadOnly = $true } catch { }
-    Write-Host "Seeded base ICC → $base"
+    Write-Host "Seeded base ICC → $base ($((Get-Item $base).Length) B)"
 }
 
 function Publish-Active([string]$Source) {

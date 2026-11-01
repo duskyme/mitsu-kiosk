@@ -1,22 +1,30 @@
-# Phase 0 spike → Phase 1 filter
+# Phase 0 spike → Phase 1 filter → MK-9 lab
 
 | Spike / phase | Status | Notes |
 | --- | --- | --- |
-| S1 Bridge | **Code pass** | `Cp9550SpoolBridge` → `SendSpool`. Dry-run verified. Live USB TBD. |
-| S3 ICC | **Hooks pass** | Package ICC + ProgramData active profile. PS visibility needs real queue. |
-| S2 V4 queue | **Stubs → Phase 1** | INF/GPD/manifest + **render filter DLL**. |
-| Phase 1 filter | **Code pass** | `Cp9550RenderFilter` + `cp9550_spool` match `Protocol.BuildSpool`. XPS→spool on a signed queue still needs lab install. |
+| S1 Bridge | **PASS (hardware)** | Live `--spool-file` → `SendSpool` on CP-9550DW-S (WinUSB). |
+| S3 ICC | **PASS (queue)** | `CP9550_active.icc` associated; Color Mgmt path seeded. Photoshop Proof Setup not re-checked in this pass. |
+| S2 V4 queue | **PASS (empty pipeline)** | Test-signed ClassVer 4.0 package; queue on `127.0.0.1:9100`. |
+| Phase 1 filter | **Code + offline PASS** | `cp9550-spooltool` / parity OK. Pipeline wiring of `Cp9550RenderFilter.dll` still blocked (event 235). |
 
-## Offline bring-up (always available)
+## Offline bring-up
 
 ```powershell
 .\filter\build.ps1
 .\filter\_out\Release\cp9550-spooltool.exe --solid 10 20 30 --out _capture\job.bin
-dotnet run --project ..\Cp9550Native\Cp9550SpoolBridge -- --dry-run --spool-file _capture\job.bin
+dotnet run --project ..\Cp9550Native\Cp9550SpoolBridge -- --spool-file _capture\job.bin
+```
+
+## Queue install
+
+```powershell
+# Admin
+.\install-printer.ps1 -Sign
 ```
 
 ## What’s next
 
-1. Hardware: `--spool-file` through bridge on a real CP-9550DW-S.
-2. Test-sign V4 package; print one XPS/Photo job through the queue.
-3. Phase 2: 5×7 / 6×9 + full quality/copies UI + ICC soft-proof confirmation.
+1. Core-companion / RequiredFiles story so `Cp9550RenderFilter.dll` can sit in the XPS pipeline.
+2. One XPS/Photo print through the queue → bridge once the filter is wired.
+3. Phase 2: 5×7 / 6×9 + full quality/copies UI.
+4. Guard WinUSB vs usbprint after queue install (install.ps1 force-bind helps).

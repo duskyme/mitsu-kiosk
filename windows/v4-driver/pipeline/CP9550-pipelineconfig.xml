@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Phase 1 queue package ships an empty filter list so Add-Printer succeeds.
+  Cp9550RenderFilter.dll is validated offline via cp9550-spooltool → SpoolBridge.
+  Wiring the IHV filter into this pipeline needs a core-companion / RequiredFiles
+  story (PrintService event 235 otherwise).
+-->
+<Filters />

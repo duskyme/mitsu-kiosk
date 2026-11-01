@@ -86,6 +86,33 @@ else {
     catch {
       Write-Host "    pnputil /update-driver failed: $_" -ForegroundColor Yellow
     }
+    # usbprint.sys often stays bound after a V4/USB001 experiment even when our
+    # package is "up-to-date". Force the WinUSB INF onto the hardware ID.
+    try {
+      if (-not ("Cp9550UpdDrv" -as [type])) {
+        Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class Cp9550UpdDrv {
+  [DllImport("newdev.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+  public static extern bool UpdateDriverForPlugAndPlayDevices(
+      IntPtr hwndParent, string HardwareId, string FullInfPath, uint InstallFlags, out bool bRebootRequired);
+  public const uint INSTALLFLAG_FORCE = 0x1;
+  public const uint INSTALLFLAG_NONINTERACTIVE = 0x4;
+}
+"@
+      }
+      $reboot = $false
+      $ok = [Cp9550UpdDrv]::UpdateDriverForPlugAndPlayDevices(
+          [IntPtr]::Zero, $hardwareId, $inf,
+          [Cp9550UpdDrv]::INSTALLFLAG_FORCE -bor [Cp9550UpdDrv]::INSTALLFLAG_NONINTERACTIVE,
+          [ref]$reboot)
+      $err = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+      Write-Host ("    UpdateDriverForPlugAndPlayDevices ok={0} reboot={1} win32={2}" -f $ok, $reboot, $err)
+    }
+    catch {
+      Write-Host "    UpdateDriverForPlugAndPlayDevices failed: $_" -ForegroundColor Yellow
+    }
     try {
       Disable-PnpDevice -InstanceId $dev.InstanceId -Confirm:$false -ErrorAction Stop
       Start-Sleep -Milliseconds 500

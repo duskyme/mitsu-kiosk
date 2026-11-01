@@ -22,7 +22,9 @@ windows/Cp9550Native/dist/
 windows/Cp9550Native/_diag/
 windows/Cp9550Native/_smoke/
 windows/v4-driver/_stage/
+windows/v4-driver/_stage_*/
 windows/v4-driver/_capture/
+windows/v4-driver/_lab-*.ps1
 windows/v4-driver/filter/_out/
 *.user
 *.suo
