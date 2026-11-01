@@ -86,21 +86,31 @@ def build_headers(media: MediaPreset, quality: Quality, copies: int, cut_2x6: bo
     return bytes(hdr1 + hdr2 + hdr3)
 
 
-def split_planar_bgr(rgb_bytes: bytes, cols: int, rows: int) -> tuple[bytes, bytes, bytes]:
-    """rgb_bytes: tightly packed RGB (3 bytes/pixel). Returns B, G, R planes."""
+def split_planar_rgb(rgb_bytes: bytes, cols: int, rows: int) -> tuple[bytes, bytes, bytes]:
+    """rgb_bytes: tightly packed RGB (3 bytes/pixel). Returns R, G, B planes.
+
+    CP-9550 8bpp spool is planar RGB (R then G then B). Packed BGR (plane
+    hdr 0x80) is a different wire format — do not send B,G,R for planar.
+    """
     plane = cols * rows
     if len(rgb_bytes) < plane * 3:
         raise ValueError(f"Need {plane * 3} RGB bytes, got {len(rgb_bytes)}")
-    b = bytearray(plane)
-    g = bytearray(plane)
     r = bytearray(plane)
+    g = bytearray(plane)
+    b = bytearray(plane)
     mv = memoryview(rgb_bytes)
     for i in range(plane):
         o = i * 3
         r[i] = mv[o]
         g[i] = mv[o + 1]
         b[i] = mv[o + 2]
-    return bytes(b), bytes(g), bytes(r)
+    return bytes(r), bytes(g), bytes(b)
+
+
+def split_planar_bgr(rgb_bytes: bytes, cols: int, rows: int) -> tuple[bytes, bytes, bytes]:
+    """Deprecated alias returning (B, G, R). Prefer split_planar_rgb."""
+    r, g, b = split_planar_rgb(rgb_bytes, cols, rows)
+    return b, g, r
 
 
 def _plane_block(plane: bytes, cols: int, rows: int) -> bytes:
@@ -109,12 +119,12 @@ def _plane_block(plane: bytes, cols: int, rows: int) -> bytes:
 
 
 def build_spool(rgb_bytes: bytes, media: MediaPreset, quality: Quality, copies: int = 1) -> bytes:
-    b, g, r = split_planar_bgr(rgb_bytes, media.cols, media.rows)
+    r, g, b = split_planar_rgb(rgb_bytes, media.cols, media.rows)
     return (
         build_headers(media, quality, copies)
-        + _plane_block(b, media.cols, media.rows)
-        + _plane_block(g, media.cols, media.rows)
         + _plane_block(r, media.cols, media.rows)
+        + _plane_block(g, media.cols, media.rows)
+        + _plane_block(b, media.cols, media.rows)
         + FOOTER_9550S
     )
 

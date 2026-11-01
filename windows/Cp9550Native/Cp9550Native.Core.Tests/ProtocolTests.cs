@@ -39,6 +39,20 @@ public class ProtocolTests
         Assert.Equal(expected, spool.Length);
         Assert.Equal(Protocol.Footer9550S, spool[^4..]);
         Assert.Equal(new byte[] { 0x1B, 0x5A, 0x54, 0x00 }, spool.AsSpan(150, 4).ToArray());
+        // Planar RGB: first plane payload is Red (10), not Blue (30).
+        Assert.Equal(10, spool[150 + 12]);
+        Assert.Equal(20, spool[150 + 12 + plane + 12]);
+        Assert.Equal(30, spool[150 + 12 + 2 * (plane + 12)]);
+    }
+
+    [Fact]
+    public void SplitPlanarRgb_KeepsChannelOrder()
+    {
+        var rgb = new byte[] { 10, 20, 30 };
+        var (r, g, b) = Protocol.SplitPlanarRgb(rgb, 1, 1);
+        Assert.Equal(new byte[] { 10 }, r);
+        Assert.Equal(new byte[] { 20 }, g);
+        Assert.Equal(new byte[] { 30 }, b);
     }
 
     [Fact]

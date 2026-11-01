@@ -11,7 +11,7 @@ from protocol import (
     build_headers,
     build_spool,
     parse_media_status,
-    split_planar_bgr,
+    split_planar_rgb,
 )
 
 
@@ -40,17 +40,18 @@ class ProtocolTests(unittest.TestCase):
         # Tiny synthetic pattern scaled mentally: build exact frame of gray
         plane = media.cols * media.rows
         rgb = bytes([10, 20, 30]) * plane
-        b, g, r = split_planar_bgr(rgb, media.cols, media.rows)
-        self.assertEqual(b, bytes([30]) * plane)
-        self.assertEqual(g, bytes([20]) * plane)
+        r, g, b = split_planar_rgb(rgb, media.cols, media.rows)
         self.assertEqual(r, bytes([10]) * plane)
+        self.assertEqual(g, bytes([20]) * plane)
+        self.assertEqual(b, bytes([30]) * plane)
 
         spool = build_spool(rgb, media, Quality.FINE, 1)
         expected = 150 + 3 * (12 + plane) + 4
         self.assertEqual(len(spool), expected)
         self.assertTrue(spool.endswith(FOOTER_9550S))
-        # First plane header
+        # First plane header + Red payload (planar RGB, not BGR).
         self.assertEqual(spool[150:154], bytes([0x1B, 0x5A, 0x54, 0x00]))
+        self.assertEqual(spool[150 + 12], 10)
 
     def test_parse_media(self) -> None:
         buf = bytearray(48)

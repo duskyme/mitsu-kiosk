@@ -95,15 +95,20 @@ public static class Protocol
         return all;
     }
 
-    public static (byte[] B, byte[] G, byte[] R) SplitPlanarBgr(ReadOnlySpan<byte> rgb, int cols, int rows)
+    /// <summary>
+    /// Split tightly packed RGB into planar R, G, B for the CP-9550 spool.
+    /// Selphy documents 8bpp planar as <c>planar RGB</c> (R then G then B).
+    /// Packed BGR (plane hdr 0x80) is a different format — do not confuse the two.
+    /// </summary>
+    public static (byte[] R, byte[] G, byte[] B) SplitPlanarRgb(ReadOnlySpan<byte> rgb, int cols, int rows)
     {
         var plane = cols * rows;
         if (rgb.Length < plane * 3)
             throw new ArgumentException($"Need {plane * 3} RGB bytes, got {rgb.Length}");
 
-        var b = new byte[plane];
-        var g = new byte[plane];
         var r = new byte[plane];
+        var g = new byte[plane];
+        var b = new byte[plane];
         for (var i = 0; i < plane; i++)
         {
             var o = i * 3;
@@ -111,7 +116,7 @@ public static class Protocol
             g[i] = rgb[o + 1];
             b[i] = rgb[o + 2];
         }
-        return (b, g, r);
+        return (r, g, b);
     }
 
     private static byte[] PlaneBlock(byte[] plane, int cols, int rows)
@@ -126,19 +131,20 @@ public static class Protocol
 
     public static byte[] BuildSpool(ReadOnlySpan<byte> rgb, MediaPreset media, QualityMode quality, int copies = 1)
     {
-        var (b, g, r) = SplitPlanarBgr(rgb, media.Cols, media.Rows);
+        var (r, g, b) = SplitPlanarRgb(rgb, media.Cols, media.Rows);
         var headers = BuildHeaders(media, quality, copies);
-        var planeB = PlaneBlock(b, media.Cols, media.Rows);
-        var planeG = PlaneBlock(g, media.Cols, media.Rows);
+        // Planar RGB: Red, Green, Blue (not BGR — that caused R/B swap on print).
         var planeR = PlaneBlock(r, media.Cols, media.Rows);
+        var planeG = PlaneBlock(g, media.Cols, media.Rows);
+        var planeB = PlaneBlock(b, media.Cols, media.Rows);
 
-        var total = headers.Length + planeB.Length + planeG.Length + planeR.Length + Footer9550S.Length;
+        var total = headers.Length + planeR.Length + planeG.Length + planeB.Length + Footer9550S.Length;
         var spool = new byte[total];
         var o = 0;
         Buffer.BlockCopy(headers, 0, spool, o, headers.Length); o += headers.Length;
-        Buffer.BlockCopy(planeB, 0, spool, o, planeB.Length); o += planeB.Length;
-        Buffer.BlockCopy(planeG, 0, spool, o, planeG.Length); o += planeG.Length;
         Buffer.BlockCopy(planeR, 0, spool, o, planeR.Length); o += planeR.Length;
+        Buffer.BlockCopy(planeG, 0, spool, o, planeG.Length); o += planeG.Length;
+        Buffer.BlockCopy(planeB, 0, spool, o, planeB.Length); o += planeB.Length;
         Buffer.BlockCopy(Footer9550S, 0, spool, o, Footer9550S.Length);
         return spool;
     }

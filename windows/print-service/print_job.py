@@ -55,7 +55,7 @@ def main() -> int:
     )
     rgb = rasterize(args.image, media, fit=args.fit)
     spool = build_spool(rgb, media, quality, copies=args.copies)
-    print(f"Spool size: {len(spool):,} bytes (planar BGR, printer-native color)")
+    print(f"Spool size: {len(spool):,} bytes (planar RGB, printer-native color)")
 
     out = args.spool_out
     if out is None and (args.dry_run or not args.do_print):

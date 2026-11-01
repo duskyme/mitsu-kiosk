@@ -78,7 +78,7 @@ export default function App() {
         <p className="mt-3 max-w-2xl text-base text-mute sm:text-lg">
           User-mode ovládač a spool composer pre Mitsubishi{' '}
           <span className="text-paper">CP-9550DW-S</span>. Natívne rozlíšenie, bez Gutenprint
-          farebného soft-proofu — pixely idú do tlačovej hlavy ako planar BGR.
+          farebného soft-proofu — pixely idú do tlačovej hlavy ako planar RGB.
         </p>
       </header>
 
@@ -144,7 +144,7 @@ export default function App() {
               </label>
             </div>
             <p className="mt-3 text-xs leading-relaxed text-mute">
-              Gutenprint/CUPS často preženie ICC a medzikroky rasteru — tu ostáva 8-bit BGR v
+              Gutenprint/CUPS často preženie ICC a medzikroky rasteru — tu ostáva 8-bit planar RGB v
               exaktnom {media.cols}×{media.rows}. Kalibráciu rob cez ICC profil vo Photoshope /
               Lightroome pred exportom, alebo nechaj printer-native.
             </p>
