@@ -39,7 +39,7 @@ Needs   = WINUSB.NT.Services
 AddReg = DeviceInterface_AddReg
 
 [DeviceInterface_AddReg]
-HKR,,DeviceInterfaceGUIDs,0x10000,"{d3c9550a-06d3-4a55-9d77-c9550dws0001}"
+HKR,,DeviceInterfaceGUIDs,0x10000,"{D3C9550A-06D3-4A55-9D77-C9550D050001}"
 
 [Strings]
 ManufacturerName = "CP9550 Native (community)"

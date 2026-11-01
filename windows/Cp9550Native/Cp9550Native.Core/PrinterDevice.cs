@@ -30,19 +30,41 @@ public sealed class PrinterDevice : IDisposable
 
     public static bool IsPresent()
     {
-        var finder = new UsbDeviceFinder(UsbIds.VendorId, UsbIds.ProductIdCp9550DwS);
-        var dev = UsbDevice.OpenUsbDevice(finder);
-        if (dev is null)
-            return false;
-        dev.Close();
-        return true;
+        try
+        {
+            var finder = new UsbDeviceFinder(UsbIds.VendorId, UsbIds.ProductIdCp9550DwS);
+            var dev = UsbDevice.OpenUsbDevice(finder);
+            if (dev is null)
+                return false;
+            dev.Close();
+            return true;
+        }
+        catch (FormatException)
+        {
+            // Bad DeviceInterfaceGUIDs in an older INF (non-hex GUID) surfaces here.
+            throw new InvalidOperationException(
+                "Neplatný WinUSB GUID v ovládači. Spusti znova windows\\install.ps1 (Admin) " +
+                "alebo Zadig → WinUSB, potom odpoj/zapoj USB.");
+        }
     }
 
     public static PrinterDevice Open()
     {
-        var finder = new UsbDeviceFinder(UsbIds.VendorId, UsbIds.ProductIdCp9550DwS);
-        var device = UsbDevice.OpenUsbDevice(finder)
-            ?? throw new InvalidOperationException(
+        UsbDevice? device;
+        try
+        {
+            var finder = new UsbDeviceFinder(UsbIds.VendorId, UsbIds.ProductIdCp9550DwS);
+            device = UsbDevice.OpenUsbDevice(finder);
+        }
+        catch (FormatException)
+        {
+            throw new InvalidOperationException(
+                "Neplatný WinUSB GUID v ovládači. Spusti znova windows\\install.ps1 (Admin) " +
+                "alebo Zadig → WinUSB, potom odpoj/zapoj USB.");
+        }
+
+        if (device is null)
+            throw new InvalidOperationException(
                 "CP-9550DW-S nenájdená (USB 06D3:03A5). Nainštaluj WinUSB INF alebo Zadig.");
 
         if (device is IUsbDevice whole)
