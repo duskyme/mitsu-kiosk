@@ -311,8 +311,11 @@ if (-not $SkipQueue) {
 }
 
 Write-Host ""
-Write-Host "Bridge (keep running before jobs):"
-Write-Host "  dotnet run --project `"$bridgeProj`" -- --port $BridgePort --save-dir `"$here\_capture`""
+Write-Host "Bridge REQUIRED for queue prints (live SendSpool — NOT --dry-run):"
+Write-Host "  & `"$(Join-Path $here 'start-bridge.ps1')`""
+Write-Host "  # If port $BridgePort is held by a leftover dry-run lab process:"
+Write-Host "  & `"$(Join-Path $here 'start-bridge.ps1')`" -KillExisting"
+Write-Host "  # (--dry-run makes Windows report SUCCESS while the printer stays idle)"
 Write-Host "Offline spool (no XPS queue):"
 Write-Host "  & `"$spoolTool`" --solid 220 40 40 --out `"$here\_capture\job.bin`""
 Write-Host "  dotnet run --project `"$bridgeProj`" -- --spool-file `"$here\_capture\job.bin`""
