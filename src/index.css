@@ -17,30 +17,6 @@
   --color-ok: #6fbf7a;
 }
 
-@font-face {
-  font-family: "Syne";
-  font-style: normal;
-  font-weight: 600 800;
-  font-display: swap;
-  src: url("https://fonts.gstatic.com/s/syne/v22/8vIS7w4qmoVsOYZ2msqTP3RK.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "Manrope";
-  font-style: normal;
-  font-weight: 400 700;
-  font-display: swap;
-  src: url("https://fonts.gstatic.com/s/manrope/v15/xn7_YHE41ni1AdIRggdxSotrDF39rj6sqw.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "IBM Plex Mono";
-  font-style: normal;
-  font-weight: 400 500;
-  font-display: swap;
-  src: url("https://fonts.gstatic.com/s/ibmplexmono/v19/-F6qfjptAgt5VM-kVkqdyU8n3twJwlBFgg.woff2") format("woff2");
-}
-
 * {
   box-sizing: border-box;
 }
