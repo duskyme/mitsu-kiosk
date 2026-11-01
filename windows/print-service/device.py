@@ -17,10 +17,12 @@ from protocol import (
     CMD_STATUS_B,
     FOOTER_9550S,
     S_INIT,
+    START_JOB_S,
     USB_PID_CP9550DW_S,
     USB_VID,
     iter_chunks,
     parse_media_status,
+    parse_printer_status,
 )
 
 try:
@@ -131,16 +133,31 @@ class Cp9550S:
             media_max=media["max"],
         )
 
-    def wait_idle(self, timeout_s: float = 180.0) -> None:
+    def wait_ready_for_job(self, timeout_s: float = 30.0) -> None:
         deadline = time.time() + timeout_s
+        last = None
         while time.time() < deadline:
-            sts = self.status()
-            # sts5 at offset 16 — 0 means ready for another job (per selphy_print).
-            sts5 = sts[16] if len(sts) > 16 else 0xFF
-            if sts5 == 0:
+            raw = self.status()
+            last = parse_printer_status(raw)
+            if last and last["ready_for_job"]:
+                return
+            time.sleep(0.5)
+        raise TimeoutError(f"Printer not ready for job (sts5!=0): {last}")
+
+    def wait_print_complete(self, timeout_s: float = 300.0) -> None:
+        deadline = time.time() + timeout_s
+        last = None
+        while time.time() < deadline:
+            raw = self.status()
+            last = parse_printer_status(raw)
+            if last and last["idle"]:
                 return
             time.sleep(1.0)
-        raise TimeoutError("Printer did not return to idle in time")
+        raise TimeoutError(f"Printer did not finish print (sts1!=0): {last}")
+
+    def wait_idle(self, timeout_s: float = 180.0) -> None:
+        # Back-compat name used by CLI after submit: wait for print complete.
+        self.wait_print_complete(timeout_s=timeout_s)
 
     def send_spool_payload(self, spool: bytes, progress=None) -> None:
         """
@@ -162,9 +179,16 @@ class Cp9550S:
         self.s_handshake()
         self.media_status()
         self.status_b()
-        self.wait_idle(timeout_s=30)
+        self.wait_ready_for_job(timeout_s=30)
 
-        self.write(headers)
+        self.write(START_JOB_S)
+        pre = parse_printer_status(self.status())
+        if not pre or not pre["ready_for_job"]:
+            raise RuntimeError(f"Not ready after StartJobS: {pre}")
+
+        self.write(headers[0:50])
+        self.write(headers[50:100])
+        self.write(headers[100:150])
         self.write(CLEAR_MEMORY_S)
 
         sent = 0
@@ -176,9 +200,11 @@ class Cp9550S:
 
         self.media_status()
         self.status_b()
-        sts = self.status()
-        if len(sts) > 7 and sts[6] != 0:
-            raise RuntimeError("Printer cover open (or status MM busy/error)")
+        sts = parse_printer_status(self.status())
+        if not sts or not sts["ready_for_job"]:
+            raise RuntimeError(f"Printer did not accept plane data (sts5): {sts}")
+        if (sts["sts3"] & 0xC0) == 0:
+            raise RuntimeError(f"Unexpected sts3 before footer: {sts}")
 
         self.write(FOOTER_9550S)
         if progress:

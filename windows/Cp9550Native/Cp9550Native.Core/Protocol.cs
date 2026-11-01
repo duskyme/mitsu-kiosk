@@ -47,6 +47,8 @@ public static class Protocol
 {
     public static readonly byte[] Footer9550S = { 0x1B, 0x50, 0x47, 0x00 };
     public static readonly byte[] ClearMemoryS = { 0x1B, 0x5A, 0x43, 0x00 };
+    /// <summary>CP-9550DW-S only: must precede job headers (selphy_print).</summary>
+    public static readonly byte[] StartJobS = { 0x1B, 0x44, 0x00, 0x00 };
     public static readonly byte[] InitCmd1 = { 0x1B, 0x53, 0xC5, 0x9D };
     public static readonly byte[] InitCmd2 = { 0x1B, 0x4B, 0x7F, 0x00 };
     public static readonly byte[] CmdMedia = { 0x1B, 0x56, 0x24, 0x00 };
@@ -161,6 +163,18 @@ public static class Protocol
     }
 
     /// <summary>
+    /// Status (0x56 0x30) layout from selphy_print <c>mitsu9550_status</c>:
+    /// sts1@6 (0=idle), sts3@16, sts4@17, sts5@18 (0=ready for next job).
+    /// </summary>
+    public static PrinterStatus? ParsePrinterStatus(ReadOnlySpan<byte> buf)
+    {
+        if (buf.Length < 19 || buf[0] != 0x30 || buf[1] != 0x2E)
+            return null;
+        var copies = BinaryPrimitives.ReadUInt16BigEndian(buf.Slice(8, 2));
+        return new PrinterStatus(buf[6], buf[16], buf[17], buf[18], copies);
+    }
+
+    /// <summary>
     /// Serial reply layout observed on CP-9550DW-S:
     ///   E4 72 6E 00 | len | UTF-16LE payload
     /// (0x72 0x6E echoes the "rn" serial command).
@@ -204,3 +218,16 @@ public static class Protocol
 }
 
 public sealed record MediaStatus(int Type, int Max, int Remain, string Name);
+
+/// <param name="Sts1">MM — 0 = idle / print finished.</param>
+/// <param name="Sts3">QQ — selphy expects bits 0xC0 set before starting print.</param>
+/// <param name="Sts5">SS — 0 = ready to accept another job.</param>
+public sealed record PrinterStatus(byte Sts1, byte Sts3, byte Sts4, byte Sts5, int Copies)
+{
+    public bool IsIdle => Sts1 == 0;
+    public bool ReadyForJob => Sts5 == 0;
+    public bool CanStartPrint => ReadyForJob && (Sts3 & 0xC0) != 0;
+
+    public string Summary =>
+        $"sts1=0x{Sts1:X2} sts3=0x{Sts3:X2} sts5=0x{Sts5:X2} copies={Copies}";
+}

@@ -85,4 +85,21 @@ public class ProtocolTests
         Assert.Null(Protocol.ParseMediaStatus(junk));
         Assert.True(Protocol.LooksLikeSerial(junk));
     }
+
+    [Fact]
+    public void ParsePrinterStatus_UsesSelphyOffsets()
+    {
+        // Live idle status: sts1@6=00, sts3@16=3E, sts5@18=00
+        var buf = Convert.FromHexString(
+            "302E00000000000000000000000000003E0000000000000000000000000000000000000000000000FFE40B0079380000");
+        var sts = Protocol.ParsePrinterStatus(buf);
+        Assert.NotNull(sts);
+        Assert.Equal(0x00, sts!.Sts1);
+        Assert.Equal(0x3E, sts.Sts3);
+        Assert.Equal(0x00, sts.Sts5);
+        Assert.True(sts.IsIdle);
+        Assert.True(sts.ReadyForJob);
+        // Old bug: treating index 16 as sts5 would see 0x3E and never go idle/ready.
+        Assert.NotEqual(0, buf[16]);
+    }
 }

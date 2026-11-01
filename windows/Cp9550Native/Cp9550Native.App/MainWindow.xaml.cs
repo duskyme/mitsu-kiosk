@@ -165,13 +165,13 @@ public partial class MainWindow : Window
             StatusText.Text = "Rasterizujem na natívne pixely…";
             _spool = await Task.Run(() =>
                 BuildSpoolBytes(job.Path, job.Media, job.Quality, job.Copies, job.Fit));
-            StatusText.Text = $"Spool {_spool.Length:N0} B — posielam cez USB…";
+            StatusText.Text = $"Spool {_spool.Length:N0} B — handshake / čakám ready…";
 
             // Progress<T> captures the UI SynchronizationContext when created here.
             var progress = new Progress<double>(p =>
             {
                 Progress.Value = p;
-                StatusText.Text = $"USB prenos {p:0.0}%";
+                StatusText.Text = $"USB prenos dát {p:0.0}%";
             });
 
             var spool = _spool;
@@ -179,7 +179,8 @@ public partial class MainWindow : Window
             {
                 using var prn = PrinterDevice.Open();
                 prn.SendSpool(spool, progress);
-                prn.WaitIdle();
+                // sts1==0 means print finished (not sts5 — that is "ready for next job").
+                prn.WaitPrintComplete();
             });
 
             Progress.Value = 100;

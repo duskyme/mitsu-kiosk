@@ -239,7 +239,18 @@ public sealed class PrinterDevice : IDisposable
                 "Neočakávaná media odpoveď: " + Protocol.DescribeUnexpectedReply(raw));
     }
 
-    public byte[] Status() => Query(Protocol.CmdStatus, 64);
+    public byte[] StatusRaw() => QueryUntil(
+        Protocol.CmdStatus,
+        b => Protocol.ParsePrinterStatus(b) is not null,
+        size: 64);
+
+    public PrinterStatus Status()
+    {
+        var raw = StatusRaw();
+        return Protocol.ParsePrinterStatus(raw)
+            ?? throw new InvalidOperationException(
+                "Neočakávaná status odpoveď: " + Protocol.DescribeUnexpectedReply(raw));
+    }
 
     public byte[] StatusB() => Query(Protocol.CmdStatusB, 64);
 
@@ -264,19 +275,40 @@ public sealed class PrinterDevice : IDisposable
         };
     }
 
-    public void WaitIdle(TimeSpan? timeout = null)
+    /// <summary>Wait until sts5==0 (printer will accept a new job).</summary>
+    public void WaitReadyForJob(TimeSpan? timeout = null)
     {
-        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromMinutes(3));
+        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(30));
+        PrinterStatus? last = null;
         while (DateTime.UtcNow < deadline)
         {
-            var sts = Status();
-            var sts5 = sts.Length > 16 ? sts[16] : (byte)0xFF;
-            if (sts5 == 0)
+            last = Status();
+            if (last.ReadyForJob)
+                return;
+            Thread.Sleep(500);
+        }
+        throw new TimeoutException(
+            "Tlačiareň nie je pripravená na job (sts5≠0). " + (last?.Summary ?? ""));
+    }
+
+    /// <summary>Wait until sts1==0 (print finished / idle). Used after footer.</summary>
+    public void WaitPrintComplete(TimeSpan? timeout = null)
+    {
+        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromMinutes(5));
+        PrinterStatus? last = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            last = Status();
+            if (last.IsIdle)
                 return;
             Thread.Sleep(1000);
         }
-        throw new TimeoutException("Tlačiareň sa nevrátila do idle.");
+        throw new TimeoutException(
+            "Tlačiareň nedokončila tlač (sts1≠0). " + (last?.Summary ?? ""));
     }
+
+    /// <summary>Back-compat alias: ready-for-job wait (sts5), not print-complete.</summary>
+    public void WaitIdle(TimeSpan? timeout = null) => WaitReadyForJob(timeout);
 
     public void SendSpool(byte[] spool, IProgress<double>? progress = null)
     {
@@ -285,28 +317,40 @@ public sealed class PrinterDevice : IDisposable
         if (spool[0] != 0x1B || spool[1] != 0x57 || spool[2] != 0x20 || spool[3] != 0x2E)
             throw new ArgumentException("Toto nie je CP-9550 header-1 spool.");
 
-        var headers = spool.AsSpan(0, 150).ToArray();
+        var headers = spool.AsSpan(0, 150);
         var body = spool.AsSpan(150);
-        byte[] planes;
+        ReadOnlySpan<byte> planes;
         if (body.Length >= 4 &&
             body[^4] == Protocol.Footer9550S[0] &&
             body[^3] == Protocol.Footer9550S[1] &&
             body[^2] == Protocol.Footer9550S[2] &&
             body[^1] == Protocol.Footer9550S[3])
         {
-            planes = body[..^4].ToArray();
+            planes = body[..^4];
         }
         else
         {
-            planes = body.ToArray();
+            planes = body;
         }
 
+        // selphy_print CP-9550DW-S sequence:
+        // handshake → media/statusB/status(ready) → 1B 44 00 00 → status again →
+        // hdr1+hdr2+hdr3 → clear-memory → planes → media/statusB/status(check) → footer.
         HandshakeS();
         _ = MediaStatus();
         _ = StatusB();
-        WaitIdle(TimeSpan.FromSeconds(30));
+        WaitReadyForJob(TimeSpan.FromSeconds(30));
 
-        Write(headers);
+        Write(Protocol.StartJobS);
+        var pre = Status();
+        if (!pre.ReadyForJob)
+            throw new InvalidOperationException(
+                "Po StartJobS tlačiareň stále nie je ready: " + pre.Summary);
+
+        // Three 50-byte headers as separate OUT transfers (matches selphy_print).
+        Write(headers[..50].ToArray());
+        Write(headers[50..100].ToArray());
+        Write(headers[100..150].ToArray());
         Write(Protocol.ClearMemoryS);
 
         const int chunk = 262144;
@@ -314,7 +358,7 @@ public sealed class PrinterDevice : IDisposable
         while (sent < planes.Length)
         {
             var n = Math.Min(chunk, planes.Length - sent);
-            var piece = planes.AsSpan(sent, n).ToArray();
+            var piece = planes.Slice(sent, n).ToArray();
             Write(piece, timeoutMs: 60000);
             sent += n;
             progress?.Report(100.0 * sent / planes.Length);
@@ -323,8 +367,14 @@ public sealed class PrinterDevice : IDisposable
         _ = MediaStatus();
         _ = StatusB();
         var sts = Status();
-        if (sts.Length > 6 && sts[6] != 0)
-            throw new InvalidOperationException("Kryt tlačiarne je otvorený (alebo status MM error).");
+        // selphy: require sts5==0 and sts3 bits 0xC0 before "end data" footer.
+        if (!sts.ReadyForJob)
+            throw new InvalidOperationException(
+                "Pred footerom nie je sts5 ready — tlačiareň pravdepodobne neprijala dáta. " +
+                sts.Summary);
+        if ((sts.Sts3 & 0xC0) == 0)
+            throw new InvalidOperationException(
+                "Pred footerom neočakávaný sts3 (chýbajú bity 0xC0) — " + sts.Summary);
 
         Write(Protocol.Footer9550S);
         progress?.Report(100);
