@@ -1,0 +1,187 @@
+================================================================================
+CP-9550 Native — postup (Mitsubishi CP-9550DW-S na Windows 11)
+Repo: https://cursor.com/codebase/du-an/mitsu-kiosk  (private)
+================================================================================
+Dátum projektu: november 2026
+Cieľ: tlačiť z Windows 11 na kioskovú tlačiareň CP-9550DW-S bez Gutenprint
+      soft-proofu (ktorý kazil farby a rozlíšenie na Linuxe).
+
+
+--------------------------------------------------------------------------------
+1. VÝCHODISKOVÁ SITUÁCIA
+--------------------------------------------------------------------------------
+- Model: Mitsubishi CP-9550DW-S (kiosk), USB VID:PID = 06D3:03A5
+- Retail CP-9550DW má PID 03A1 a oficiálny ovládač CPD9550V — na -S nepasuje
+- Predtým: Gutenprint / CUPS na Linuxe → fungovalo, ale farby + rozlíšenie OK nie
+- Protokol (reverse engineering): Solomon Peachy / selphy_print / Gutenprint
+
+
+--------------------------------------------------------------------------------
+2. ČO SME ZISTILI O PROTOKOLU
+--------------------------------------------------------------------------------
+- Tlačiareň NIE JE štandardný USB Printer Class — potrebuje 2-way handshake
+- Spool: 3× 50 B hlavičky + 3 planárne roviny B,G,R (8-bit) + footer
+- Footer pre -S: 1B 50 47 00
+- Špeciálne -S príkazy: handshake 1B 53 C5 9D / 1B 4B 7F 00, clear 1B 5A 43 00
+- Natívne rámce (exaktné pixely):
+    4×6"  CK9015   2152 × 1416
+    5×7"  CK9318   1812 × 2452
+    6×9"  CK9523   2152 × 2792
+- Kvalita: Fine / SuperFine / FineDeep
+- Farby: printer-native = žiadna ICC / žiadny Gutenprint LUT — len planar BGR
+
+
+--------------------------------------------------------------------------------
+3. ARCHITEKTÚRA RIEŠENIA
+--------------------------------------------------------------------------------
+Microsoft-signed kernel „printer class“ ovládač sme nerobili (pre -S ani
+neexistuje oficiálne). Namiesto toho:
+
+  A) WinUSB INF  (windows/inf/CP9550DW-S.inf)
+     — raz naviaže zariadenie na WinUSB
+
+  B) Natívna Windows app  (windows/Cp9550Native/)
+     — .NET 8 WPF → CP9550Native.exe
+     — SkiaSharp rasterizácia na natívne pixely
+     — LibUsbDotNet USB prenos
+
+  C) Voliteľne Python CLI  (windows/print-service/)
+     — ten istý protokol, bez GUI
+
+  D) Web composer  (npm run dev → http://127.0.0.1:43155)
+     — náhľad / export .mitsu9550s spoolu
+
+
+--------------------------------------------------------------------------------
+4. POSTUP VÝVOJA (chronologicky)
+--------------------------------------------------------------------------------
+1) Preskúmanie Gutenprint/selphy_print backend_mitsu9550.c (protokol, médiá)
+2) TypeScript protokol + Vite composer (spool builder v prehliadači)
+3) Python print-service (protocol.py, device.py, print_job.py, status.py)
+4) WinUSB INF + install.ps1
+5) Prechod na natívnu WPF app (.NET 8 Core + App)
+6) Opravy počas inštalácie u používateľa:
+   - install.ps1: Unicode pomlčka kazila Windows PowerShell 5.1 → ASCII
+   - INF GUID {…c9550dws…} bol neplatný (non-hex) →
+     {D3C9550A-06D3-4A55-9D77-C9550D050001}
+   - bin/obj boli omylom v gite → odstránené z trackingu (.gitignore)
+7) Pokus o remote inštaláciu cez self-hosted worker „9550driver“ —
+   Task sa z tohto cloud runu neumiestnil na Windows My Machine
+   (zostal Linux cloud). Inštalácia ostala lokálne u používateľa.
+
+
+--------------------------------------------------------------------------------
+5. INŠTALÁCIA NA WINDOWS 11 (aktuálny postup)
+--------------------------------------------------------------------------------
+Predpoklady:
+  - Windows 11
+  - Git (origin / git)
+  - .NET 8 SDK: https://dotnet.microsoft.com/download/dotnet/8.0
+  - Tlačiareň zapojená USB
+
+A) Clone (ak ešte nemáš) — Origin CLI cez WSL:
+
+    curl -fsSL https://downloads.cursor.com/origin/install.sh | sh
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+    source ~/.bashrc
+    origin auth login
+    origin repo clone du-an/mitsu-kiosk
+
+   Origin CLI docs: https://cursor.com/docs/origin/cli
+   Browse: https://cursor.com/codebase/du-an/mitsu-kiosk  (Private)
+
+B) Aktualizácia repo (PowerShell):
+
+    cd C:\src\mitsu-kiosk
+    git restore windows\Cp9550Native
+    git clean -fd windows\Cp9550Native
+    git pull
+
+C) WinUSB (Admin PowerShell):
+
+    cd C:\src\mitsu-kiosk\windows
+    .\install.ps1
+    # odpoj a znova zapoj USB
+    # Device Manager: „Mitsubishi CP-9550DW-S (WinUSB)“
+    # Ak unsigned INF zablokuje Windows → Zadig → WinUSB pre 06D3:03A5
+
+D) Build appky:
+
+    cd C:\src\mitsu-kiosk\windows\Cp9550Native
+    .\publish.ps1
+    .\dist\CP9550Native.exe
+
+E) V appke:
+    - vyber médium (4×6 / 5×7 / 6×9)
+    - quality SuperFine (default)
+    - nahraj fotku → Tlačiť
+    - Color pipeline: printer-native (bez ICC v ovládači)
+
+
+--------------------------------------------------------------------------------
+6. ALTERNATÍVA: PYTHON CLI
+--------------------------------------------------------------------------------
+    cd C:\src\mitsu-kiosk\windows\print-service
+    python -m venv .venv
+    .\.venv\Scripts\Activate.ps1
+    pip install -r requirements.txt
+    python status.py
+    python print_job.py C:\cesta\foto.jpg --media 4x6 --quality superfine --print
+
+
+--------------------------------------------------------------------------------
+7. WEB COMPOSER (náhľad spoolu)
+--------------------------------------------------------------------------------
+    cd C:\src\mitsu-kiosk   # alebo WSL/Linux
+    npm install
+    npm run dev
+    # http://127.0.0.1:43155
+    # export .mitsu9550s → send_spool.py na Windows
+
+
+--------------------------------------------------------------------------------
+8. ZNÁME PROBLÉMY A RIEŠENIA
+--------------------------------------------------------------------------------
+- „string is missing the terminator“ v install.ps1
+    → starý súbor s Unicode; git pull + nový ASCII skript
+
+- „Guid string should only contain hexadecimal characters“
+    → starý INF s neplatným GUID; git pull + znova .\install.ps1 + replug USB
+
+- git pull blokovaný lokálnymi bin/obj
+    → git restore windows\Cp9550Native && git clean -fd windows\Cp9550Native
+
+- CP9550Native.exe not found
+    → dist sa necommituje; najprv .\publish.ps1
+
+- Self-hosted worker online, ale agent beží na Linuxe
+    → z tohto cloud runu sa Task na My Machines neumiestnil;
+      spusti inštaláciu lokálne alebo nový agent s machine=9550driver
+
+
+--------------------------------------------------------------------------------
+9. ŠTRUKTÚRA REPO (dôležité cesty)
+--------------------------------------------------------------------------------
+  README.md
+  POSTUP.txt                          ← tento súbor
+  windows/
+    install.ps1                       WinUSB inštalátor (Admin)
+    inf/CP9550DW-S.inf
+    Cp9550Native/                     WPF app + publish.ps1
+      Cp9550Native.Core/              protokol, USB, raster
+      Cp9550Native.App/               GUI
+      dist/CP9550Native.exe           po publish (lokálne)
+    print-service/                    Python CLI
+  src/                                web composer (Vite/React)
+
+
+--------------------------------------------------------------------------------
+10. LICENCIA / KREDIT
+--------------------------------------------------------------------------------
+- Kód v tomto repo: MIT
+- Protokolový layout podľa reverse engineeringu Solomona Peachya
+  (selphy_print / Gutenprint) — nie oficiálny produkt Mitsubishi Electric
+
+================================================================================
+Koniec POSTUP.txt
+================================================================================
