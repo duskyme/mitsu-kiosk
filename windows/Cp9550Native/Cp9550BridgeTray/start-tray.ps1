@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Build (if needed) and launch Cp9550BridgeTray in the notification area.
@@ -7,14 +7,14 @@
   No elevation / no UAC prompt. WinUSB must already be bound (windows\install.ps1).
   Tray auto-starts Cp9550SpoolBridge when USB 06D3:03A5 appears and stops it on unplug.
 
-  Windows logon auto-start is OPTIONAL (HKCU Run) — use -RegisterStartup /
+  Windows logon auto-start is OPTIONAL (HKCU Run) - use -RegisterStartup /
   -UnregisterStartup. That is separate from -NoAuto (USB plug control).
 
 .PARAMETER NoAuto
   Disable USB auto-start (manual Start/Stop only).
 
 .PARAMETER DryRun
-  Lab only — bridge will not SendSpool.
+  Lab only - bridge will not SendSpool.
 
 .PARAMETER Port
   TCP port (default 9100).
