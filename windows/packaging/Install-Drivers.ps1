@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 #Requires -Version 5.1
 <#
 .SYNOPSIS
@@ -36,7 +36,7 @@ $v4 = Join-Path $root "v4-driver\install-printer.ps1"
 
 Write-Host "== CP-9550 TEST driver install ==" -ForegroundColor Cyan
 Write-Host "Root: $root"
-Write-Host "UNOFFICIAL TEST BUILD — not WHQL, not Mitsubishi-signed." -ForegroundColor Yellow
+Write-Host "UNOFFICIAL TEST BUILD - not WHQL, not Mitsubishi-signed." -ForegroundColor Yellow
 
 if (-not $SkipWinUsb) {
     if (-not (Test-Path $winusb)) { throw "Missing $winusb" }

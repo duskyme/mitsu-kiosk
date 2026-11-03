@@ -1,18 +1,18 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Launch Cp9550BridgeTray (notification area). No elevation / no UAC.
 
 .DESCRIPTION
   By default this only starts the tray for the current session.
-  Windows logon auto-start is OPTIONAL — use -RegisterStartup / -UnregisterStartup
+  Windows logon auto-start is OPTIONAL - use -RegisterStartup / -UnregisterStartup
   (HKCU Run; no Admin). Distinct from -NoAuto (USB plug auto-start of SpoolBridge).
 
 .PARAMETER NoAuto
   Disable USB auto-start (manual Start/Stop only).
 
 .PARAMETER DryRun
-  Lab only — bridge will NOT SendSpool (printer stays idle).
+  Lab only - bridge will NOT SendSpool (printer stays idle).
 
 .PARAMETER Port
   TCP listen port (default 9100; must match the V4 Standard TCP/IP Port).
@@ -45,8 +45,8 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $tray = Join-Path $root "bin\Cp9550BridgeTray.exe"
 $bridge = Join-Path $root "bin\Cp9550SpoolBridge.exe"
-if (-not (Test-Path $tray)) { throw "Missing $tray — reinstall the package." }
-if (-not (Test-Path $bridge)) { throw "Missing $bridge — reinstall the package." }
+if (-not (Test-Path $tray)) { throw "Missing $tray - reinstall the package." }
+if (-not (Test-Path $bridge)) { throw "Missing $bridge - reinstall the package." }
 
 $argList = [System.Collections.Generic.List[string]]::new()
 $argList.AddRange([string[]]@("--port", "$Port", "--bridge-exe", $bridge))
@@ -75,7 +75,7 @@ if ($RegisterStartup) {
         Write-Host "Registered. Tray will start at next logon (or run without -RegisterOnly to start now)."
         return
     }
-    # --and-run: tray registers then shows UI — do not Start-Process again
+    # --and-run: tray registers then shows UI - do not Start-Process again
     Write-Host "Starting tray with logon registration (no UAC): $tray"
     Start-Process -FilePath $tray -ArgumentList $regArgs
     return
