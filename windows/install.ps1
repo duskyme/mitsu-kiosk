@@ -14,15 +14,15 @@
   (Guid string should only contain hexadecimal characters).
 
   -Sign mirrors windows\v4-driver\install-printer.ps1 -Sign:
-    Inf2Cat → SignTool (WDKTestCert) → pnputil of the signed catalog package.
+    Inf2Cat -> SignTool (WDKTestCert) -> pnputil of the signed catalog package.
 
   Signing vs nagging:
-    • Preferred: WDKTestCert in CurrentUser\My AND imported to LocalMachine\Root
+    Preferred: WDKTestCert in CurrentUser\My AND imported to LocalMachine\Root
       + TrustedPublisher. Then Driver Signature Enforcement accepts the package
       without bcdedit testsigning (same as V4 queue).
-    • Fallback: bcdedit /set testsigning on (+ reboot) if the cert is not trusted
+    Fallback: bcdedit /set testsigning on (+ reboot) if the cert is not trusted
       machine-wide. Secure Boot machines still need a trusted test cert or
-      testsigning — this script never pops interactive UAC beyond the required
+      testsigning -- this script never pops interactive UAC beyond the required
       elevated shell (#Requires -RunAsAdministrator fails fast if not Admin).
 
 .PARAMETER Sign
@@ -44,7 +44,7 @@ $ErrorActionPreference = 'Stop'
 $infSource = Join-Path $PSScriptRoot 'inf\CP9550DW-S.inf'
 $expectedGuid = '{D3C9550A-06D3-4A55-9D77-C9550D050001}'
 $badGuidNeedle = 'c9550dws'
-$hardwareId = "USB\VID_06D3&PID_03A5"
+$hardwareId = 'USB\VID_06D3&PID_03A5'
 $stage = Join-Path $PSScriptRoot '_stage_winusb'
 
 Write-Host 'CP-9550 Native - WinUSB installer' -ForegroundColor Cyan
@@ -86,16 +86,19 @@ function Assert-WdkTestCertReady([string]$SubjectSubstr) {
   $root = Get-ChildItem Cert:\LocalMachine\Root -ErrorAction SilentlyContinue | Where-Object Thumbprint -eq $tp
   $pub = Get-ChildItem Cert:\LocalMachine\TrustedPublisher -ErrorAction SilentlyContinue | Where-Object Thumbprint -eq $tp
   if (-not $root -or -not $pub) {
-    Write-Warning @"
-WDK test cert '$($my[0].Subject)' is in CurrentUser\My but not fully trusted for DriverStore.
-Import the same cert (Admin) into LocalMachine\Root and LocalMachine\TrustedPublisher, e.g.:
-  Export-Certificate -Cert Cert:\CurrentUser\My\$tp -FilePath `$env:TEMP\wdk.cer
-  Import-Certificate -FilePath `$env:TEMP\wdk.cer -CertStoreLocation Cert:\LocalMachine\Root
-  Import-Certificate -FilePath `$env:TEMP\wdk.cer -CertStoreLocation Cert:\LocalMachine\TrustedPublisher
-Without that, enable testsigning (bcdedit /set testsigning on + reboot) or Windows will still nag / reject the package.
-"@
-  } else {
-    Write-Host "WDK test cert OK: $($my[0].Subject) (Root+TrustedPublisher) — bcdedit testsigning NOT required" -ForegroundColor Green
+    $cer = Join-Path $env:TEMP 'wdk.cer'
+    $msg = @(
+      "WDK test cert '$($my[0].Subject)' is in CurrentUser\My but not fully trusted for DriverStore."
+      'Import the same cert (Admin) into LocalMachine\Root and LocalMachine\TrustedPublisher, e.g.:'
+      "  Export-Certificate -Cert Cert:\CurrentUser\My\$tp -FilePath $cer"
+      "  Import-Certificate -FilePath $cer -CertStoreLocation Cert:\LocalMachine\Root"
+      "  Import-Certificate -FilePath $cer -CertStoreLocation Cert:\LocalMachine\TrustedPublisher"
+      'Without that, enable testsigning (bcdedit /set testsigning on + reboot) or Windows will still nag / reject the package.'
+    ) -join [Environment]::NewLine
+    Write-Warning $msg
+  }
+  else {
+    Write-Host ("WDK test cert OK: {0} (Root+TrustedPublisher) -- bcdedit testsigning NOT required" -f $my[0].Subject) -ForegroundColor Green
   }
   return $my[0]
 }
@@ -118,6 +121,22 @@ function Get-Cp9550PublishedDrivers {
   return $results
 }
 
+function Ensure-Cp9550UpdDrvType {
+  if ("Cp9550UpdDrv" -as [type]) { return }
+  # Literal single-quoted here-string (no expansion). Terminator must be column 0.
+  Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class Cp9550UpdDrv {
+  [DllImport("newdev.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+  public static extern bool UpdateDriverForPlugAndPlayDevices(
+      IntPtr hwndParent, string HardwareId, string FullInfPath, uint InstallFlags, out bool bRebootRequired);
+  public const uint INSTALLFLAG_FORCE = 0x1;
+  public const uint INSTALLFLAG_NONINTERACTIVE = 0x4;
+}
+'@
+}
+
 # Stage a flat package (INF + optional .cat) so Inf2Cat / pnputil share one folder.
 if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
@@ -126,44 +145,44 @@ $inf = Join-Path $stage 'CP9550DW-S.inf'
 
 if ($Sign) {
   $null = Assert-WdkTestCertReady $CertSubject
-  $inf2cat = Find-KitTool "Inf2Cat.exe"
-  $signtool = Find-KitTool "signtool.exe"
+  $inf2cat = Find-KitTool 'Inf2Cat.exe'
+  $signtool = Find-KitTool 'signtool.exe'
   if (-not $inf2cat -or -not $signtool) {
-    throw "Sign requested but Inf2Cat/signtool not found under Windows Kits\10\bin"
+    throw 'Sign requested but Inf2Cat/signtool not found under Windows Kits\10\bin'
   }
-  Write-Host "Inf2Cat..."
+  Write-Host 'Inf2Cat...'
   & $inf2cat /driver:$stage /os:10_X64
   if ($LASTEXITCODE -ne 0) { throw "Inf2Cat failed ($LASTEXITCODE)" }
-  $cat = Get-ChildItem $stage -Filter "*.cat" | Select-Object -First 1
+  $cat = Get-ChildItem $stage -Filter '*.cat' | Select-Object -First 1
   if (-not $cat) { throw "Inf2Cat produced no .cat in $stage" }
-  $catPath = Join-Path $stage "CP9550DW-S.cat"
+  $catPath = Join-Path $stage 'CP9550DW-S.cat'
   if ($cat.FullName -ne $catPath) {
     Move-Item -LiteralPath $cat.FullName -Destination $catPath -Force
   }
   Write-Host "SignTool /fd SHA256 /n $CertSubject..."
   & $signtool sign /fd SHA256 /s My /n $CertSubject /tr http://timestamp.digicert.com /td SHA256 $catPath
   if ($LASTEXITCODE -ne 0) {
-    Write-Warning "Timestamped sign failed; retrying without timestamp"
+    Write-Warning 'Timestamped sign failed; retrying without timestamp'
     & $signtool sign /fd SHA256 /s My /n $CertSubject $catPath
   }
   if ($LASTEXITCODE -ne 0) { throw "SignTool failed ($LASTEXITCODE)" }
   & $signtool verify /pa $catPath
   if ($LASTEXITCODE -ne 0) { throw "SignTool verify failed ($LASTEXITCODE)" }
   $sig = Get-AuthenticodeSignature $catPath
-  Write-Host "Catalog signature: $($sig.Status) ($($sig.SignerCertificate.Subject))"
+  Write-Host ("Catalog signature: {0} ({1})" -f $sig.Status, $sig.SignerCertificate.Subject)
 }
 
 $ts = Test-TestSigningEnabled
-Write-Host ("testsigning: " + $(if ($ts) { "ON" } else { "OFF (OK if WDK test cert is in Root+TrustedPublisher)" }))
+Write-Host ('testsigning: ' + $(if ($ts) { 'ON' } else { 'OFF (OK if WDK test cert is in Root+TrustedPublisher)' }))
 
 Write-Host ''
 Write-Host 'Scanning for older CP9550DW-S WinUSB packages...'
 $published = @(Get-Cp9550PublishedDrivers)
 foreach ($pkg in $published) {
   $mark = if ($pkg.HasBadGuid) { 'BAD GUID' } else { 'ok' }
-  Write-Host ("  {0}: {1}" -f $pkg.PublishedName, $mark)
+  Write-Host ('  {0}: {1}' -f $pkg.PublishedName, $mark)
   if ($pkg.HasBadGuid) {
-    Write-Host ("  Removing {0} (non-hex DeviceInterfaceGUIDs)..." -f $pkg.PublishedName) -ForegroundColor Yellow
+    Write-Host ('  Removing {0} (non-hex DeviceInterfaceGUIDs)...' -f $pkg.PublishedName) -ForegroundColor Yellow
     & pnputil.exe /delete-driver $pkg.PublishedName /uninstall /force 2>&1 | ForEach-Object { Write-Host "    $_" }
   }
 }
@@ -175,16 +194,18 @@ $pnpExit = $LASTEXITCODE
 Write-Host $pnpOut.TrimEnd()
 Write-Host "pnputil exit: $pnpExit"
 # 0 = added. 259 = identical package already present (same as V4 install-printer.ps1).
-$alreadyPresent = ($pnpExit -eq 259) -or (($pnpOut -match "(?i)Added driver packages:\s*0") -and ($pnpOut -match "(?i)Total driver packages:\s*1"))
+$alreadyPresent = ($pnpExit -eq 259) -or (($pnpOut -match '(?i)Added driver packages:\s*0') -and ($pnpOut -match '(?i)Total driver packages:\s*1'))
 if ($pnpExit -ne 0 -and -not $alreadyPresent) {
-  Write-Warning @"
-Driver store add failed (exit $pnpExit).
-Checklist:
-  1) Re-run elevated with -Sign (WDKTestCert in CurrentUser\My).
-  2) Cert also in LocalMachine\Root + TrustedPublisher (see warning above).
-  3) Or: bcdedit /set testsigning on  (reboot), then re-run -Sign.
-"@
-} elseif ($alreadyPresent -and $pnpExit -ne 0) {
+  $msg = @(
+    "Driver store add failed (exit $pnpExit)."
+    'Checklist:'
+    '  1. Re-run elevated with -Sign (WDKTestCert in CurrentUser\My).'
+    '  2. Cert also in LocalMachine\Root + TrustedPublisher (see warning above).'
+    '  3. Or: bcdedit /set testsigning on (reboot), then re-run -Sign.'
+  ) -join [Environment]::NewLine
+  Write-Warning $msg
+}
+elseif ($alreadyPresent -and $pnpExit -ne 0) {
   Write-Host "pnputil ${pnpExit}: package already in DriverStore (not a signing failure)."
 }
 
@@ -199,7 +220,7 @@ if (-not $SkipBind) {
   }
   else {
     foreach ($dev in $devices) {
-      Write-Host ("  Device: {0} ({1})" -f $dev.FriendlyName, $dev.InstanceId)
+      Write-Host ('  Device: {0} ({1})' -f $dev.FriendlyName, $dev.InstanceId)
       try {
         & pnputil.exe /update-driver $dev.InstanceId $inf 2>&1 | ForEach-Object { Write-Host "    $_" }
       }
@@ -209,26 +230,14 @@ if (-not $SkipBind) {
       # usbprint.sys often stays bound after a V4/USB001 experiment even when our
       # package is "up-to-date". Force the WinUSB INF onto the hardware ID.
       try {
-        if (-not ("Cp9550UpdDrv" -as [type])) {
-          Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public static class Cp9550UpdDrv {
-  [DllImport("newdev.dll", CharSet=CharSet.Unicode, SetLastError=true)]
-  public static extern bool UpdateDriverForPlugAndPlayDevices(
-      IntPtr hwndParent, string HardwareId, string FullInfPath, uint InstallFlags, out bool bRebootRequired);
-  public const uint INSTALLFLAG_FORCE = 0x1;
-  public const uint INSTALLFLAG_NONINTERACTIVE = 0x4;
-}
-"@
-        }
+        Ensure-Cp9550UpdDrvType
         $reboot = $false
         $ok = [Cp9550UpdDrv]::UpdateDriverForPlugAndPlayDevices(
             [IntPtr]::Zero, $hardwareId, $inf,
             [Cp9550UpdDrv]::INSTALLFLAG_FORCE -bor [Cp9550UpdDrv]::INSTALLFLAG_NONINTERACTIVE,
             [ref]$reboot)
         $err = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
-        Write-Host ("    UpdateDriverForPlugAndPlayDevices ok={0} reboot={1} win32={2}" -f $ok, $reboot, $err)
+        Write-Host ('    UpdateDriverForPlugAndPlayDevices ok={0} reboot={1} win32={2}' -f $ok, $reboot, $err)
       }
       catch {
         Write-Host "    UpdateDriverForPlugAndPlayDevices failed: $_" -ForegroundColor Yellow
@@ -249,20 +258,20 @@ public static class Cp9550UpdDrv {
 Write-Host ''
 Write-Host 'Verifying DeviceInterfaceGUIDs in registry...'
 $regOk = $false
-$usbKey = "HKLM:\SYSTEM\CurrentControlSet\Enum\USB\VID_06D3&PID_03A5"
+$usbKey = 'HKLM:\SYSTEM\CurrentControlSet\Enum\USB\VID_06D3&PID_03A5'
 if (Test-Path $usbKey) {
   Get-ChildItem $usbKey -ErrorAction SilentlyContinue | ForEach-Object {
     $diPath = Join-Path $_.PSPath 'Device Parameters'
     $di = Get-ItemProperty -Path $diPath -Name DeviceInterfaceGUIDs -ErrorAction SilentlyContinue
     if (-not $di) {
-      Write-Host ("  {0}: (no DeviceInterfaceGUIDs yet)" -f $_.PSChildName)
+      Write-Host ('  {0}: (no DeviceInterfaceGUIDs yet)' -f $_.PSChildName)
       return
     }
     $guids = @($di.DeviceInterfaceGUIDs)
     foreach ($g in $guids) {
       $hexOk = Test-GuidIsHex $g
       $color = if ($hexOk) { 'Green' } else { 'Red' }
-      Write-Host ("  {0}: {1}" -f $_.PSChildName, $g) -ForegroundColor $color
+      Write-Host ('  {0}: {1}' -f $_.PSChildName, $g) -ForegroundColor $color
       if ($hexOk -and ($g.Trim('{}').ToUpperInvariant() -eq $expectedGuid.Trim('{}').ToUpperInvariant())) {
         $regOk = $true
       }
@@ -273,7 +282,7 @@ if (Test-Path $usbKey) {
   }
 }
 else {
-  Write-Host "  USB\VID_06D3&PID_03A5 not present in Enum yet."
+  Write-Host '  USB\VID_06D3&PID_03A5 not present in Enum yet.'
 }
 
 Write-Host ''
@@ -282,14 +291,14 @@ if ($regOk) {
 }
 else {
   Write-Host 'If the GUID is still wrong, unplug/replug the USB cable and re-run this script.' -ForegroundColor Yellow
-  Write-Host "Fallback: Zadig -> WinUSB for USB\VID_06D3&PID_03A5, then unplug/replug." -ForegroundColor Yellow
+  Write-Host 'Fallback: Zadig -> WinUSB for USB\VID_06D3&PID_03A5, then unplug/replug.' -ForegroundColor Yellow
 }
 
 Write-Host ''
 Write-Host 'Then verify in Device Manager that it shows as:'
 Write-Host '  Mitsubishi CP-9550DW-S (WinUSB)' -ForegroundColor Yellow
 Write-Host ''
-Write-Host 'Next — tray (USB auto-start, no UAC):'
+Write-Host 'Next -- tray (USB auto-start, no UAC):'
 Write-Host '  cd Cp9550Native\Cp9550BridgeTray'
 Write-Host '  .\start-tray.ps1'
 Write-Host ''
