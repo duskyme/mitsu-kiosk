@@ -44,6 +44,7 @@ Cp9550RenderFilter::Cp9550RenderFilter()
     , m_shutdown(0)
     , m_cols(2152)
     , m_rows(1416)
+    , m_media(CP9550_MEDIA_4X6)
     , m_quality(CP9550_QUALITY_SUPERFINE)
     , m_copies(1)
     , m_pagesDone(0)
@@ -147,11 +148,20 @@ HRESULT Cp9550RenderFilter::ResolveRasterFactory()
     return hr;
 }
 
+void Cp9550RenderFilter::ApplyMedia(enum cp9550_media media)
+{
+    const cp9550_media_info *info = cp9550_media_get(media);
+    if (!info)
+        return;
+    m_media = (int)media;
+    m_cols = info->cols;
+    m_rows = info->rows;
+}
+
 HRESULT Cp9550RenderFilter::ParseJobTicket(IFixedPage *page)
 {
-    /* Phase 1: keep 4×6 SuperFine defaults. Light-touch PT scrape for quality/copies. */
-    m_cols = 2152;
-    m_rows = 1416;
+    /* Defaults: 4×6 SuperFine. Scrape PageMediaSize + PageOutputQuality + copies. */
+    ApplyMedia(CP9550_MEDIA_4X6);
     m_quality = CP9550_QUALITY_SUPERFINE;
     m_copies = 1;
 
@@ -172,14 +182,47 @@ HRESULT Cp9550RenderFilter::ParseJobTicket(IFixedPage *page)
                 ULONG read = 0;
                 if (SUCCEEDED(is->Read(xml.data(), (ULONG)st.cbSize.QuadPart, &read))) {
                     xml[read] = 0;
-                    if (strstr(xml.data(), "Photographic") || strstr(xml.data(), "FineDeep") || strstr(xml.data(), "finedeep"))
+                    const char *x = xml.data();
+
+                    /* Media: keyword first, then width microns (4/5/6 inch). */
+                    if (strstr(x, "NorthAmerica6x9") || strstr(x, "PHOTO_6x9") ||
+                        strstr(x, ">6 x 9") || strstr(x, "6x9"))
+                        ApplyMedia(CP9550_MEDIA_6X9);
+                    else if (strstr(x, "NorthAmerica5x7") || strstr(x, "PHOTO_5x7") ||
+                             strstr(x, ">5 x 7") || strstr(x, "5x7"))
+                        ApplyMedia(CP9550_MEDIA_5X7);
+                    else if (strstr(x, "NorthAmerica4x6") || strstr(x, "PHOTO_4x6") ||
+                             strstr(x, ">4 x 6") || strstr(x, "4x6"))
+                        ApplyMedia(CP9550_MEDIA_4X6);
+                    else {
+                        const char *wKey = strstr(x, "MediaSizeWidth");
+                        if (wKey) {
+                            const char *v = strstr(wKey, ">");
+                            if (v) {
+                                int microns = atoi(v + 1);
+                                /* 1 inch = 25400 microns; allow ±2% */
+                                if (microns > 148000 && microns < 157000)
+                                    ApplyMedia(CP9550_MEDIA_6X9);
+                                else if (microns > 124000 && microns < 130000)
+                                    ApplyMedia(CP9550_MEDIA_5X7);
+                                else if (microns > 99000 && microns < 105000)
+                                    ApplyMedia(CP9550_MEDIA_4X6);
+                            }
+                        }
+                    }
+
+                    /* Quality: FineDeep/Photographic → FineDeep; Normal → Fine; High/SuperFine → SuperFine */
+                    if (strstr(x, "Photographic") || strstr(x, "FineDeep") || strstr(x, "finedeep"))
                         m_quality = CP9550_QUALITY_FINEDEEP;
-                    else if (strstr(xml.data(), "\"Normal\"") || strstr(xml.data(), ">Normal<") || strstr(xml.data(), "PageOutputQuality\">Normal"))
+                    else if (strstr(x, "PageOutputQuality") &&
+                             (strstr(x, "\"Normal\"") || strstr(x, ">Normal<") || strstr(x, "name=\"psk:Normal\"")))
                         m_quality = CP9550_QUALITY_FINE;
-                    else if (strstr(xml.data(), "High") || strstr(xml.data(), "SuperFine"))
+                    else if (strstr(x, "\"Normal\"") || strstr(x, ">Normal<") || strstr(x, "name=\"psk:Normal\""))
+                        m_quality = CP9550_QUALITY_FINE;
+                    else if (strstr(x, "High") || strstr(x, "SuperFine"))
                         m_quality = CP9550_QUALITY_SUPERFINE;
 
-                    const char *copiesKey = strstr(xml.data(), "JobCopiesAllDocuments");
+                    const char *copiesKey = strstr(x, "JobCopiesAllDocuments");
                     if (copiesKey) {
                         const char *v = strstr(copiesKey, ">");
                         if (v) {
@@ -188,6 +231,11 @@ HRESULT Cp9550RenderFilter::ParseJobTicket(IFixedPage *page)
                                 m_copies = c;
                         }
                     }
+
+                    char mediaLog[128];
+                    sprintf_s(mediaLog, "ParseJobTicket media=%d %dx%d quality=%d copies=%d",
+                              m_media, m_cols, m_rows, m_quality, m_copies);
+                    FilterLog(mediaLog);
                 }
             }
             is->Release();
@@ -292,7 +340,7 @@ HRESULT Cp9550RenderFilter::ProcessFixedPage(IFixedPage *fixedPage)
     int built = cp9550_build_spool(
         rgb,
         rgbLen,
-        CP9550_MEDIA_4X6,
+        (enum cp9550_media)m_media,
         (enum cp9550_quality)m_quality,
         m_copies,
         &spool,

@@ -9,9 +9,19 @@ cd windows\Cp9550Native
 ```
 
 1. Pripoj tlačiareň  
-2. Admin: `.\install.ps1` (odstráni starý nehex GUID `c9550dws`, nainštaluje WinUSB; alebo Zadig → WinUSB)  
-3. Ak Device Manager ešte ukazuje starý stav: odpoj/zapoj USB a znova Admin `.\install.ps1`  
-4. Spusti `CP9550Native.exe`
+2. Admin (už elevated shell — skript nevie UAC prompt): `.\install.ps1 -Sign`  
+   (Inf2Cat + WDKTestCert catalog; bez `-Sign` ostáva unsigned lab path)  
+3. Ak Device Manager ešte ukazuje starý stav: odpoj/zapoj USB a znova Admin `.\install.ps1 -Sign`  
+4. Spusti `CP9550Native.exe` **alebo** tray bridge nižšie
+
+## SpoolBridge tray (Print dialog / V4)
+
+```powershell
+cd windows\Cp9550Native\Cp9550BridgeTray
+.\start-tray.ps1
+```
+
+Ikona pri hodinách: status + Start/Restart/Stop; auto-start pri USB.
 
 ## Prečo nie oficiálny Mitsubishi ovládač?
 
@@ -20,21 +30,23 @@ cd windows\Cp9550Native
 | CP-9550DW (retail) | `03A1` | CPD9550V |
 | **CP-9550DW-S (kiosk)** | **`03A5`** | **žiadny** |
 
-## V4 hybrid (Print dialog path — Phase 1)
+## V4 hybrid (Print dialog — Phase 2 media/quality)
 
 ```powershell
 # Build XPS → spool filter + offline spooltool
 cd v4-driver\filter
 .\build.ps1
 
-# Bridge: TCP 127.0.0.1:9100 → SendSpool
-cd ..\..\Cp9550Native
-dotnet run --project Cp9550SpoolBridge -- --port 9100 --dry-run
+# Admin — test-signed queue (4×6 / 5×7 / 6×9 + Fine/SuperFine/FineDeep)
+cd ..
+.\install-printer.ps1 -Sign -ForceReplace
 
-# Queue + ICC: see v4-driver\README.md (install-printer.ps1)
-# Offline spool without queue: v4-driver\filter\README.md
+# Bridge via tray (preferred) or:
+.\start-bridge.ps1
 ```
 
+WinUSB device package: `..\install.ps1 -Sign` (same WDKTestCert story as the V4 queue).  
+Trusted cert in LocalMachine Root + TrustedPublisher ⇒ `bcdedit testsigning` usually **not** required; otherwise enable testsigning + reboot.
 
 ## Alternatíva: Python CLI
 

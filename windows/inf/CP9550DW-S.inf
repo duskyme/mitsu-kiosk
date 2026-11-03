@@ -5,9 +5,14 @@
 ; user-mode print service in windows/print-service can speak the native
 ; dye-sub protocol at full resolution without Gutenprint color mangling.
 ;
-; Install (Admin PowerShell):
+; Install (Admin PowerShell — no interactive UAC from inside the script):
+;   ..\install.ps1 -Sign
+; Or unsigned lab:
 ;   pnputil /add-driver CP9550DW-S.inf /install
-; Or run ..\install.ps1
+;
+; -Sign: Inf2Cat + WDKTestCert catalog (same pattern as v4-driver\install-printer.ps1).
+; Trusted Root+TrustedPublisher ⇒ bcdedit testsigning not required; otherwise
+; enable testsigning or Windows may still nag / reject the package.
 
 [Version]
 Signature   = "$Windows NT$"
@@ -15,9 +20,9 @@ Class       = USBDevice
 ClassGuid   = {88BAE032-5A81-49f0-BC3D-A4FF138216D6}
 Provider    = %ManufacturerName%
 CatalogFile = CP9550DW-S.cat
-; Bump when DeviceInterfaceGUIDs change so pnputil prefers this package
-; over older store copies that still carry the non-hex c9550dws0001 GUID.
-DriverVer   = 11/01/2026,1.0.1.0
+; Bump when DeviceInterfaceGUIDs / catalog story change so pnputil prefers this
+; package over older store copies that still carry the non-hex c9550dws0001 GUID.
+DriverVer   = 11/03/2026,1.0.2.0
 PnpLockdown = 1
 
 [Manufacturer]

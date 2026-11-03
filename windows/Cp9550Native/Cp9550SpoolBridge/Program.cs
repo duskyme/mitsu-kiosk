@@ -7,10 +7,15 @@ namespace Cp9550SpoolBridge;
 internal static class Program
 {
     /// <summary>
-    /// Default receive cap: enough for 4×6 SuperFine (~9.1 MB) with headroom;
-    /// raises with <c>--max-receive-bytes</c> when 5×7/6×9 jobs are wired.
+    /// Default receive cap: enough for 6×9 SuperFine (~18 MB) with headroom.
     /// </summary>
-    internal const int DefaultMaxReceiveBytes = 16 * 1024 * 1024;
+    internal const int DefaultMaxReceiveBytes = 24 * 1024 * 1024;
+
+    internal static string DefaultStatusPath { get; } =
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "CP9550",
+            "bridge-status.json");
 
     private static int Main(string[] args)
     {
@@ -81,6 +86,8 @@ internal static class Program
         Console.WriteLine("Single-flight: busy connections are rejected (no buffered backlog).");
         Console.WriteLine("Ctrl+C to stop.");
 
+        WriteStatus(opts, "listening", lastError: null);
+
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>
         {
@@ -119,14 +126,54 @@ internal static class Program
                     catch (Exception ex)
                     {
                         Console.Error.WriteLine($"[{Stamp()}] client error: {ex.Message}");
+                        WriteStatus(opts, "listening", lastError: ex.Message);
                     }
                 }
             });
         }
 
+        WriteStatus(opts, "stopped", lastError: null);
         Console.WriteLine("Bridge stopped.");
         return 0;
     }
+
+    private static void WriteStatus(Options opts, string state, string? lastError)
+    {
+        var path = opts.StatusFile;
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+        try
+        {
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir))
+                Directory.CreateDirectory(dir);
+
+            bool usb = false;
+            try { usb = PrinterDevice.IsPresent(); } catch { /* ignore */ }
+
+            var json =
+                "{" +
+                $"\"State\":\"{EscapeJson(state)}\"," +
+                $"\"Port\":{opts.Port}," +
+                $"\"DryRun\":{(opts.DryRun ? "true" : "false")}," +
+                $"\"UsbPresent\":{(usb ? "true" : "false")}," +
+                $"\"Pid\":{Environment.ProcessId}," +
+                $"\"LastError\":{(lastError is null ? "null" : "\"" + EscapeJson(lastError) + "\"")}," +
+                $"\"UpdatedUtc\":\"{DateTime.UtcNow:O}\"" +
+                "}";
+            File.WriteAllText(path, json);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("Status file write failed: " + ex.Message);
+        }
+    }
+
+    private static string EscapeJson(string s) =>
+        s.Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\"", "\\\"", StringComparison.Ordinal)
+            .Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
 
     private static void HandleClient(TcpClient client, Options opts, SemaphoreSlim jobGate)
     {
@@ -158,8 +205,16 @@ internal static class Program
             }
 
             Console.WriteLine($"[{Stamp()}] received {spool.Length} bytes from {remote}");
+            WriteStatus(opts, "printing", lastError: null);
             if (!DispatchSpool(spool, opts))
+            {
                 Console.Error.WriteLine($"[{Stamp()}] job failed");
+                WriteStatus(opts, "listening", lastError: "job failed");
+            }
+            else
+            {
+                WriteStatus(opts, "listening", lastError: null);
+            }
         }
         finally
         {
@@ -286,6 +341,7 @@ internal sealed class Options
     public bool AllowNonNative { get; init; }
     public string? SpoolFile { get; init; }
     public string? SaveDir { get; init; }
+    public string? StatusFile { get; init; } = Program.DefaultStatusPath;
     public int ReceiveTimeoutMs { get; init; } = 120_000;
     public int MaxReceiveBytes { get; init; } = Program.DefaultMaxReceiveBytes;
 
@@ -297,6 +353,7 @@ internal sealed class Options
         var allowNonNative = false;
         string? spool = null;
         string? save = null;
+        string? status = Program.DefaultStatusPath;
         var timeout = 120_000;
         var maxRecv = Program.DefaultMaxReceiveBytes;
 
@@ -323,6 +380,12 @@ internal sealed class Options
                 case "--save-dir":
                     save = args[++i];
                     break;
+                case "--status-file":
+                    status = args[++i];
+                    break;
+                case "--no-status-file":
+                    status = null;
+                    break;
                 case "--receive-timeout-ms":
                     timeout = int.Parse(args[++i]);
                     break;
@@ -342,6 +405,7 @@ internal sealed class Options
             AllowNonNative = allowNonNative,
             SpoolFile = spool,
             SaveDir = save,
+            StatusFile = status,
             ReceiveTimeoutMs = timeout,
             MaxReceiveBytes = maxRecv,
         };
@@ -361,6 +425,8 @@ internal sealed class Options
               --dry-run                Validate/save only; do not open USB
               --spool-file PATH        One-shot: send existing spool via SendSpool
               --save-dir DIR           Write each received spool to DIR
+              --status-file PATH       JSON status for tray (default %ProgramData%\CP9550\bridge-status.json)
+              --no-status-file         Disable status JSON
               --allow-non-native       Keep non-header payloads when saving/capturing
                                        (does not make SendSpool accept XPS)
               --max-receive-bytes N    Cap TCP/file spool size (default {Program.DefaultMaxReceiveBytes})
@@ -370,8 +436,8 @@ internal sealed class Options
             Single-flight: only one receive+SendSpool at a time; extra connections
             are rejected immediately (no unbounded in-memory backlog).
 
-            Install story: add a Standard TCP/IP Port → 127.0.0.1:9100 (RAW),
-            then install the V4 queue stubs under windows/v4-driver/.
+            Prefer Cp9550BridgeTray for USB auto-start near the clock.
+            Install story: Standard TCP/IP Port → 127.0.0.1:9100 (RAW) + V4 queue.
             """);
     }
 }
