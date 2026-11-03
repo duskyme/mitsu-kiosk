@@ -1,4 +1,4 @@
-; Printer package for Mitsubishi CP-9550DW-S (Phase 1)
+; Printer package for Mitsubishi CP-9550DW-S (Phase 2 media/quality)
 ;
 ; This is NOT the WinUSB device INF (see windows\inf\CP9550DW-S.inf).
 ; Queue uses Standard TCP/IP Port â†’ 127.0.0.1:9100 (RAW) where
@@ -22,7 +22,7 @@ Class       = Printer
 ClassGUID   = {4D36E979-E325-11CE-BFC1-08002BE10318}
 CatalogFile = CP9550DW-S-Printer.cat
 ClassVer    = 4.0
-DriverVer   = 11/01/2026,0.3.11.0
+DriverVer   = 11/03/2026,0.4.0.0
 PnpLockdown = 1
 
 [Manufacturer]
@@ -70,6 +70,6 @@ PackageAware = TRUE
 
 [Strings]
 ManufacturerName = "CP9550 Native (community)"
-Location         = "CP-9550 V4 Phase 1 package"
+Location         = "CP-9550 V4 Phase 2 package"
 SPSVCINST_ASSOCSERVICE = 0x00000002
 

@@ -1,10 +1,10 @@
-# CP-9550DW-S — V4 hybrid (Phase 1)
+# CP-9550DW-S — V4 hybrid (Phase 2 media/quality)
 
 Hybrid architecture from the project plan:
 
-1. **WinUSB** keeps owning the device (`windows\inf\CP9550DW-S.inf`).
-2. **`Cp9550SpoolBridge`** listens on `127.0.0.1:9100` and calls `PrinterDevice.SendSpool`.
-3. **V4 queue** is what apps see; port = Standard TCP/IP → bridge.
+1. **WinUSB** keeps owning the device (`windows\inf\CP9550DW-S.inf`) — prefer `windows\install.ps1 -Sign`.
+2. **`Cp9550SpoolBridge`** listens on `127.0.0.1:9100` and calls `PrinterDevice.SendSpool` (tray auto-starts on USB).
+3. **V4 queue** is what apps see; port = Standard TCP/IP → bridge. GPD exposes **4×6 / 5×7 / 6×9** and **Fine / SuperFine / FineDeep**.
 4. **`Cp9550RenderFilter`** turns XPS → planar RGB spool (wired in `CP9550-pipelineconfig.xml`; offline `cp9550-spooltool` still available).
 5. **ICC** `color/CP955_01.ICC` installs to dirid 66003; `associate-icc.ps1` publishes `active.icc`.
 
@@ -46,13 +46,26 @@ Requires a trusted WDK/test cert (`WDKTestCert` in CurrentUser\My **and** LocalM
 The V4 queue writes CP-9550 spool bytes to `127.0.0.1:9100`. **`Cp9550SpoolBridge` must be listening without `--dry-run`**, or Windows reports success while the printer stays idle.
 
 ```powershell
-# Live (prints):
+# Preferred — tray near the clock (USB auto-start/stop, no UAC):
+..\Cp9550Native\Cp9550BridgeTray\start-tray.ps1
+
+# Manual console:
 .\start-bridge.ps1
 .\start-bridge.ps1 -KillExisting   # if 9100 held (elevate if Access Denied)
 
 # Lab only (no USB):
 .\start-bridge.ps1 -DryRun -SaveDir .\_capture\bridge-lab
 ```
+
+## WinUSB device INF (test-sign)
+
+```powershell
+# Already-elevated Admin shell (script does not prompt UAC):
+cd ..
+.\install.ps1 -Sign
+```
+
+Same WDKTestCert / Inf2Cat / SignTool path as `-Sign` on this queue. If the cert is in LocalMachine **Root + TrustedPublisher**, `bcdedit testsigning` is usually unnecessary; otherwise turn testsigning on and reboot.
 
 ## ICC (S3)
 

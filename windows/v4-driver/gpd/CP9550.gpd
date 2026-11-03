@@ -1,7 +1,8 @@
 *%
-*% CP-9550DW-S printer GPD — Phase 1.
-*% Shape follows Microsoft MSxpsXPS.gpd (required cursor cmds). Dye-sub 4×6 added.
-*% Native pixels 2152×1416 are produced by Cp9550RenderFilter, not GPD DPI.
+*% CP-9550DW-S printer GPD — Phase 2 media + quality.
+*% Shape follows Microsoft MSxpsXPS.gpd (required cursor cmds).
+*% Native pixels come from Cp9550RenderFilter (not GPD DPI):
+*%   4x6 → 2152×1416, 5x7 → 1812×2452, 6x9 → 2152×2792.
 *%
 
 *GPDSpecVersion: "1.0"
@@ -47,7 +48,7 @@
     }
 }
 
-*% 4×6" @ 1200 master units/inch = 4800 × 7200. Keep LETTER as fallback for queue bring-up.
+*% Master units = 1200 / inch. LETTER kept as Notepad / queue bring-up fallback.
 *Feature: PaperSize
 {
     *rcNameID: =PAPER_SIZE_DISPLAY
@@ -62,11 +63,54 @@
         *PrintableArea: PAIR(4800, 7200)
     }
 
+    *Option: PHOTO_5x7
+    {
+        *Name: "5 x 7 in"
+        *PrintSchemaKeywordMap: "NorthAmerica5x7"
+        *PageDimensions: PAIR(6000, 8400)
+        *PrintableOrigin: PAIR(0, 0)
+        *PrintableArea: PAIR(6000, 8400)
+    }
+
+    *Option: PHOTO_6x9
+    {
+        *Name: "6 x 9 in"
+        *PrintSchemaKeywordMap: "NorthAmerica6x9"
+        *PageDimensions: PAIR(7200, 10800)
+        *PrintableOrigin: PAIR(0, 0)
+        *PrintableArea: PAIR(7200, 10800)
+    }
+
     *Option: LETTER
     {
         *rcNameID: =RCID_DMPAPER_SYSTEM_NAME
         *PrintableOrigin: PAIR(600, 600)
         *PrintableArea: PAIR(9000, 12000)
+    }
+}
+
+*% Maps to psk:PageOutputQuality. Filter scrapes Normal/High/Photographic (+ aliases).
+*Feature: Quality
+{
+    *Name: "Print Quality"
+    *DefaultOption: SUPERFINE
+
+    *Option: FINE
+    {
+        *Name: "Fine"
+        *PrintSchemaKeywordMap: "Normal"
+    }
+
+    *Option: SUPERFINE
+    {
+        *Name: "SuperFine"
+        *PrintSchemaKeywordMap: "High"
+    }
+
+    *Option: FINEDEEP
+    {
+        *Name: "FineDeep"
+        *PrintSchemaKeywordMap: "Photographic"
     }
 }
 

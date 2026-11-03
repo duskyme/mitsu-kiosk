@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>Cp9550BridgeTray</AssemblyName>
+    <RootNamespace>Cp9550BridgeTray</RootNamespace>
+    <Product>CP-9550 Spool Bridge Tray</Product>
+    <Description>Tray status + USB auto-start for Cp9550SpoolBridge</Description>
+    <Version>0.4.0</Version>
+    <ApplicationIcon />
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cp9550Native.Core\Cp9550Native.Core.csproj" />
+  </ItemGroup>
+</Project>
