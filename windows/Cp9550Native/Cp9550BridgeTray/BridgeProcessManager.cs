@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Net.Sockets;
 
 namespace Cp9550BridgeTray;
 
@@ -50,15 +51,22 @@ internal sealed class BridgeProcessManager : IDisposable
         }
     }
 
-    public bool IsPortListening()
+    /// <summary>
+    /// True when 127.0.0.1:port cannot be bound (something already owns it).
+    /// Prefer bind-probe over <see cref="IPGlobalProperties.GetActiveTcpListeners"/> —
+    /// on Win11 that API often omits our TcpListener, so the tray kept spawning
+    /// second bridges that FATAL with "address already in use".
+    /// </summary>
+    public bool IsPortListening() => IsPortInUse(_opts.Port);
+
+    public static bool IsPortInUse(int port)
     {
-        // Do NOT TcpClient.Connect — that Accept()s on the bridge and looks like an empty job.
+        // Fast path: .NET table (may be incomplete).
         try
         {
-            var listeners = IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners();
-            foreach (var ep in listeners)
+            foreach (var ep in IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners())
             {
-                if (ep.Port != _opts.Port)
+                if (ep.Port != port)
                     continue;
                 if (IPAddress.IsLoopback(ep.Address) ||
                     ep.Address.Equals(IPAddress.Any) ||
@@ -69,10 +77,45 @@ internal sealed class BridgeProcessManager : IDisposable
         }
         catch
         {
-            /* fall through */
+            /* fall through to bind probe */
         }
 
-        return false;
+        // Authoritative: try to bind the same endpoint the bridge uses.
+        try
+        {
+            var listener = new TcpListener(IPAddress.Loopback, port);
+            listener.Start();
+            listener.Stop();
+            return false;
+        }
+        catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
+        {
+            return true;
+        }
+        catch
+        {
+            // Permission / transient — assume busy to avoid colliding.
+            return true;
+        }
+    }
+
+    public static IReadOnlyList<Process> FindBridgeProcesses()
+    {
+        var list = new List<Process>();
+        try
+        {
+            foreach (var name in new[] { "Cp9550SpoolBridge", "cp9550spoolbridge" })
+            {
+                foreach (var p in Process.GetProcessesByName(name))
+                    list.Add(p);
+            }
+        }
+        catch
+        {
+            /* ignore */
+        }
+
+        return list;
     }
 
     public string ResolveBridgeExe()
@@ -104,12 +147,21 @@ internal sealed class BridgeProcessManager : IDisposable
         {
             if (_disposed)
                 return;
+            ReapExitedChild();
             if (IsRunning)
                 return;
 
-            // Another instance may already own 9100 (manual start-bridge.ps1).
-            if (IsPortListening())
+            // Port already owned — adopt an existing SpoolBridge if we can.
+            if (IsPortInUse(_opts.Port))
+            {
+                if (TryAdoptExistingUnlocked())
+                    return;
+                // Busy but no process we recognize: do not spawn a colliding instance.
                 return;
+            }
+
+            // Port free but orphan SpoolBridge still running (zombie) — kill then start.
+            KillForeignBridgesUnlocked();
 
             var exe = ResolveBridgeExe();
             var args = new List<string> { "--port", _opts.Port.ToString(), "--status-file", BridgeStatus.DefaultPath };
@@ -127,40 +179,66 @@ internal sealed class BridgeProcessManager : IDisposable
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden,
-                WorkingDirectory = Path.GetDirectoryName(exe) ?? hereSafe(),
+                WorkingDirectory = Path.GetDirectoryName(exe) ?? AppContext.BaseDirectory,
             };
             foreach (var a in args)
                 psi.ArgumentList.Add(a);
 
             _process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start SpoolBridge.");
-        }
 
-        static string hereSafe() => AppContext.BaseDirectory;
+            // Wait briefly for listen (or instant FATAL exit).
+            var deadline = Environment.TickCount64 + 2500;
+            while (Environment.TickCount64 < deadline)
+            {
+                if (_process.HasExited)
+                    break;
+                if (IsPortInUse(_opts.Port))
+                    return;
+                Thread.Sleep(100);
+            }
+
+            if (_process.HasExited)
+            {
+                var code = _process.ExitCode;
+                _process.Dispose();
+                _process = null;
+                // Another winner may have bound the port meanwhile — adopt.
+                if (IsPortInUse(_opts.Port) && TryAdoptExistingUnlocked())
+                    return;
+                throw new InvalidOperationException(
+                    $"SpoolBridge exited immediately (code {code}). See %ProgramData%\\CP9550\\log\\bridge.log " +
+                    "(often: port 9100 already in use).");
+            }
+        }
     }
 
     public void Stop()
     {
         lock (_gate)
         {
-            if (_process is null)
-                return;
-            try
+            if (_process is not null)
             {
-                if (!_process.HasExited)
+                try
                 {
-                    _process.Kill(entireProcessTree: true);
-                    _process.WaitForExit(3000);
+                    if (!_process.HasExited)
+                    {
+                        _process.Kill(entireProcessTree: true);
+                        _process.WaitForExit(3000);
+                    }
+                }
+                catch
+                {
+                    /* ignore */
+                }
+                finally
+                {
+                    _process.Dispose();
+                    _process = null;
                 }
             }
-            catch
-            {
-                /* ignore */
-            }
-            finally
-            {
-                _process.Dispose();
-                _process = null;
-            }
+
+            // Also clear foreign/zombie bridges so the next Start is clean.
+            KillForeignBridgesUnlocked();
         }
 
         try
@@ -187,5 +265,70 @@ internal sealed class BridgeProcessManager : IDisposable
             return;
         _disposed = true;
         Stop();
+    }
+
+    private void ReapExitedChild()
+    {
+        if (_process is null)
+            return;
+        try
+        {
+            if (_process.HasExited)
+            {
+                _process.Dispose();
+                _process = null;
+            }
+        }
+        catch
+        {
+            _process = null;
+        }
+    }
+
+    private bool TryAdoptExistingUnlocked()
+    {
+        foreach (var p in FindBridgeProcesses())
+        {
+            try
+            {
+                if (p.HasExited)
+                {
+                    p.Dispose();
+                    continue;
+                }
+
+                _process = p;
+                return true;
+            }
+            catch
+            {
+                try { p.Dispose(); } catch { /* ignore */ }
+            }
+        }
+
+        return false;
+    }
+
+    private static void KillForeignBridgesUnlocked()
+    {
+        foreach (var p in FindBridgeProcesses())
+        {
+            try
+            {
+                if (!p.HasExited)
+                {
+                    p.Kill(entireProcessTree: true);
+                    p.WaitForExit(3000);
+                }
+            }
+            catch
+            {
+                /* ignore */
+            }
+            finally
+            {
+                try { p.Dispose(); } catch { /* ignore */ }
+            }
+        }
     }
 }
