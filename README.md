@@ -58,6 +58,12 @@ V4 forbids custom language/port monitors that do USB reads for the CP-9550 hands
    .\Start-Tray.ps1
    ```
 
+   BridgeTray does **not** start at Windows logon by default. Optional enable (no Admin):
+
+   - Setup checkbox **Start Bridge Tray when I log on**, or silent `/TASKS=logonstartup`
+   - `.\Start-Tray.ps1 -RegisterStartup` (disable: `-UnregisterStartup`)
+   - Tray menu: **Start with Windows (logon)**
+
 6. Print to **Mitsubishi CP-9550DW-S (V4)**.
 
 ### Signing / testsigning
@@ -81,18 +87,19 @@ cd v4-driver\filter
 cd ..
 .\install-printer.ps1 -Sign -ForceReplace
 
-# Tray (no Admin)
+# Tray (no Admin) — current session only unless -RegisterStartup
 cd ..\Cp9550Native\Cp9550BridgeTray
 .\start-tray.ps1
+.\start-tray.ps1 -RegisterStartup   # optional: start at user logon (HKCU Run)
 ```
 
 Packaged build (Inno Setup 6 required):
 
 ```powershell
 cd windows\packaging
-.\build-release.ps1
-# → dist\releases\CP9550-Native-0.4.1-Setup.exe
-# → dist\releases\CP9550-Native-0.4.1-portable.zip
+.\build-release.ps1 -Version 0.4.2
+# → dist\releases\CP9550-Native-0.4.2-Setup.exe
+# → dist\releases\CP9550-Native-0.4.2-portable.zip
 ```
 
 ## Modify

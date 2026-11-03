@@ -14,6 +14,11 @@ Quick path (Windows 11 x64)
 3) Non-Admin:
      .\Start-Tray.ps1
    Tray icon near the clock; auto-starts SpoolBridge when USB appears.
+   Windows logon auto-start is OFF by default. Enable optionally:
+     - Setup task "Start Bridge Tray when I log on", or
+     - .\Start-Tray.ps1 -RegisterStartup
+     - Tray menu: "Start with Windows (logon)"
+     Disable: .\Start-Tray.ps1 -UnregisterStartup
 4) Print from any app to queue: "Mitsubishi CP-9550DW-S (V4)".
 
 Signing / testsigning
@@ -27,6 +32,8 @@ Secure Boot machines still need a trusted test cert or testsigning.
 Tray / bridge notes
 -------------------
 - SpoolBridge listens on 127.0.0.1:9100 (RAW) and calls WinUSB SendSpool.
+- "Auto-start on USB" (tray menu / default) ≠ Windows logon startup.
+  Logon uses optional HKCU\Software\Microsoft\Windows\CurrentVersion\Run\CP9550BridgeTray.
 - Never leave a --dry-run bridge running for real prints: Windows reports SUCCESS
   while the printer stays idle. Use Start-Tray.ps1 without -DryRun.
 - If tray OpenUsbDevice polling killed mid-job SendSpool, update to the build

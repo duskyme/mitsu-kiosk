@@ -4,7 +4,7 @@
 ; Driver install is a separate Admin step: Install-Drivers.ps1
 
 #ifndef MyAppVersion
-  #define MyAppVersion "0.4.1"
+  #define MyAppVersion "0.4.2"
 #endif
 
 #define MyAppName "CP-9550 Native"
@@ -44,9 +44,14 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut to Start-Tray"; GroupDescription: "Additional icons:"; Flags: unchecked
+Name: "logonstartup"; Description: "Start Bridge Tray when I &log on to Windows (HKCU Run)"; GroupDescription: "Startup:"; Flags: unchecked
 
 [Files]
 Source: "_stage\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Registry]
+; Optional per-user logon start — no elevation. Uninstall removes the value.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "CP9550BridgeTray"; ValueData: """{app}\bin\Cp9550BridgeTray.exe"" --bridge-exe ""{app}\bin\Cp9550SpoolBridge.exe"""; Flags: uninsdeletevalue; Tasks: logonstartup
 
 [Icons]
 Name: "{group}\Start CP-9550 Bridge Tray"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Start-Tray.ps1"""; WorkingDir: "{app}"

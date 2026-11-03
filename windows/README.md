@@ -19,9 +19,12 @@ cd windows\Cp9550Native
 ```powershell
 cd windows\Cp9550Native\Cp9550BridgeTray
 .\start-tray.ps1
+# Voliteľné — štart pri prihlásení do Windows (HKCU Run, bez Admin):
+.\start-tray.ps1 -RegisterStartup
 ```
 
-Ikona pri hodinách: status + Start/Restart/Stop; auto-start pri USB.
+Ikona pri hodinách: status + Start/Restart/Stop; auto-start SpoolBridge pri USB.
+Štart tray pri logone Windows je **voliteľný** (default OFF) — Setup task / `-RegisterStartup` / menu **Start with Windows**.
 
 ## Prečo nie oficiálny Mitsubishi ovládač?
 
