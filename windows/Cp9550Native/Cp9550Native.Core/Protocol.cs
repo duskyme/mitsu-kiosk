@@ -169,6 +169,33 @@ public static class Protocol
     }
 
     /// <summary>
+    /// selphy_print <c>validate_media</c> for CP-9550DW-S: loaded ribbon type must accept
+    /// the spool's hdr1 cols×rows. Mismatch → printer may ACK USB OUT but never raise
+    /// sts3 0x40/0x80 ("data accepted") before the footer.
+    /// </summary>
+    public static bool MediaAcceptsFrame(int mediaType, int cols, int rows)
+    {
+        return (mediaType & 0x0F) switch
+        {
+            0x02 or 0x03 => cols == 2152 && rows is 1416 or 1184 or 1240,
+            0x04 => cols == 1812 && rows == 2452,
+            0x05 => cols == 2152 && rows is 1416 or 2792 or 2956 or 3146,
+            0x06 => cols == 2152 && rows is 1416 or 2792,
+            _ => false,
+        };
+    }
+
+    /// <summary>Read cols/rows from a 150-byte CP-9550 header block (hdr1 @ +14/+16).</summary>
+    public static (int Cols, int Rows) ReadHeaderFrame(ReadOnlySpan<byte> headers150)
+    {
+        if (headers150.Length < 18)
+            throw new ArgumentException("Header too short.", nameof(headers150));
+        var cols = BinaryPrimitives.ReadUInt16BigEndian(headers150.Slice(14, 2));
+        var rows = BinaryPrimitives.ReadUInt16BigEndian(headers150.Slice(16, 2));
+        return (cols, rows);
+    }
+
+    /// <summary>
     /// Status (0x56 0x30) layout from selphy_print <c>mitsu9550_status</c>:
     /// sts1@6 (0=idle), sts3@16, sts4@17, sts5@18 (0=ready for next job).
     /// </summary>
@@ -226,12 +253,13 @@ public static class Protocol
 public sealed record MediaStatus(int Type, int Max, int Remain, string Name);
 
 /// <param name="Sts1">MM — 0 = idle / print finished.</param>
-/// <param name="Sts3">QQ — selphy expects bits 0xC0 set before starting print.</param>
-/// <param name="Sts5">SS — 0 = ready to accept another job.</param>
+/// <param name="Sts3">QQ — idle 0x3E; after planes accepted, bit 0x40 or 0x80 is set.</param>
+/// <param name="Sts5">SS — 0 = ready to accept another job / footer.</param>
 public sealed record PrinterStatus(byte Sts1, byte Sts3, byte Sts4, byte Sts5, int Copies)
 {
     public bool IsIdle => Sts1 == 0;
     public bool ReadyForJob => Sts5 == 0;
+    /// <summary>True when planes were accepted (sts3 has 0x40/0x80) and sts5 still ready for footer.</summary>
     public bool CanStartPrint => ReadyForJob && (Sts3 & 0xC0) != 0;
 
     public string Summary =>

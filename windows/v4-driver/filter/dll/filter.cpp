@@ -211,16 +211,31 @@ HRESULT Cp9550RenderFilter::ParseJobTicket(IFixedPage *page)
                         }
                     }
 
-                    /* Quality: FineDeep/Photographic → FineDeep; Normal → Fine; High/SuperFine → SuperFine */
-                    if (strstr(x, "Photographic") || strstr(x, "FineDeep") || strstr(x, "finedeep"))
-                        m_quality = CP9550_QUALITY_FINEDEEP;
-                    else if (strstr(x, "PageOutputQuality") &&
-                             (strstr(x, "\"Normal\"") || strstr(x, ">Normal<") || strstr(x, "name=\"psk:Normal\"")))
-                        m_quality = CP9550_QUALITY_FINE;
-                    else if (strstr(x, "\"Normal\"") || strstr(x, ">Normal<") || strstr(x, "name=\"psk:Normal\""))
-                        m_quality = CP9550_QUALITY_FINE;
-                    else if (strstr(x, "High") || strstr(x, "SuperFine"))
-                        m_quality = CP9550_QUALITY_SUPERFINE;
+                    /* Quality: prefer the PageOutputQuality feature value (GPD maps
+                     * Fine→Normal, SuperFine→High, FineDeep→Photographic). Avoid bare
+                     * strstr("High") across the whole ticket (false positives). */
+                    {
+                        const char *qFeat = strstr(x, "PageOutputQuality");
+                        const char *scope = qFeat ? qFeat : x;
+                        size_t scopeLen = qFeat ? 512 : strlen(x);
+                        char qbuf[512];
+                        if (scopeLen >= sizeof(qbuf))
+                            scopeLen = sizeof(qbuf) - 1;
+                        memcpy(qbuf, scope, scopeLen);
+                        qbuf[scopeLen] = 0;
+
+                        if (strstr(qbuf, "Photographic") || strstr(qbuf, "FineDeep") ||
+                            strstr(qbuf, "finedeep"))
+                            m_quality = CP9550_QUALITY_FINEDEEP;
+                        else if (strstr(qbuf, "\"Normal\"") || strstr(qbuf, ">Normal<") ||
+                                 strstr(qbuf, "name=\"psk:Normal\"") ||
+                                 strstr(qbuf, "psk:Normal"))
+                            m_quality = CP9550_QUALITY_FINE;
+                        else if (strstr(qbuf, "\"High\"") || strstr(qbuf, ">High<") ||
+                                 strstr(qbuf, "name=\"psk:High\"") ||
+                                 strstr(qbuf, "psk:High") || strstr(qbuf, "SuperFine"))
+                            m_quality = CP9550_QUALITY_SUPERFINE;
+                    }
 
                     const char *copiesKey = strstr(x, "JobCopiesAllDocuments");
                     if (copiesKey) {
@@ -232,9 +247,10 @@ HRESULT Cp9550RenderFilter::ParseJobTicket(IFixedPage *page)
                         }
                     }
 
-                    char mediaLog[128];
-                    sprintf_s(mediaLog, "ParseJobTicket media=%d %dx%d quality=%d copies=%d",
-                              m_media, m_cols, m_rows, m_quality, m_copies);
+                    char mediaLog[192];
+                    sprintf_s(mediaLog,
+                              "ParseJobTicket media=%d %dx%d quality=%d copies=%d ticketBytes=%u",
+                              m_media, m_cols, m_rows, m_quality, m_copies, read);
                     FilterLog(mediaLog);
                 }
             }
@@ -346,9 +362,22 @@ HRESULT Cp9550RenderFilter::ProcessFixedPage(IFixedPage *fixedPage)
         &spool,
         &spoolLen);
     CoTaskMemFree(rgb);
-    if (built < 0) {
+    if (built < 0 || !spool || spoolLen < 154) {
         FilterLog("cp9550_build_spool", E_FAIL);
         return E_FAIL;
+    }
+
+    {
+        char spoolLog[192];
+        sprintf_s(spoolLog,
+                  "cp9550_build_spool ok len=%zu hdr=%02X%02X%02X%02X cols=%u rows=%u q=%d copies=%d",
+                  spoolLen,
+                  spool[0], spool[1], spool[2], spool[3],
+                  (unsigned)((spool[14] << 8) | spool[15]),
+                  (unsigned)((spool[16] << 8) | spool[17]),
+                  m_quality,
+                  m_copies);
+        FilterLog(spoolLog);
     }
 
     hr = WriteAllBytes(m_writer, spool, (ULONG)spoolLen);

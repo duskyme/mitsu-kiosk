@@ -41,6 +41,12 @@ dotnet run --project ..\Cp9550Native\Cp9550SpoolBridge -- --dry-run --spool-file
 Requires a trusted WDK/test cert (`WDKTestCert` in CurrentUser\My **and** LocalMachine Root + TrustedPublisher), **or** `testsigning` on.  
 `pnputil` exit **259** with `Added driver packages: 0` means the package is **already** in DriverStore — the script treats that as OK and refreshes `Add-PrinterDriver` (not a signing failure).
 
+## Diagnostics
+
+- Filter: `%ProgramData%\CP9550\log\filter.log` (ParseJobTicket media/quality, spool len/hdr)  
+- Bridge: `%ProgramData%\CP9550\log\bridge.log` + `last-spool.bin`  
+- If USB OUT succeeds but the printer never starts: check bridge.log for `sts3 bez 0x40/0x80` or media mismatch; restart tray after pulling a build that enumerates USB without `OpenUsbDevice` (tray used to kill the bridge mid-`SendSpool`).
+
 ## Spool bridge (required for real prints)
 
 The V4 queue writes CP-9550 spool bytes to `127.0.0.1:9100`. **`Cp9550SpoolBridge` must be listening without `--dry-run`**, or Windows reports success while the printer stays idle.

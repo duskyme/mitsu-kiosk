@@ -115,5 +115,29 @@ public class ProtocolTests
         Assert.True(sts.ReadyForJob);
         // Old bug: treating index 16 as sts5 would see 0x3E and never go idle/ready.
         Assert.NotEqual(0, buf[16]);
+        // Idle has no 0x40/0x80 — those appear only after planes are accepted.
+        Assert.False(sts.CanStartPrint);
+    }
+
+    [Theory]
+    [InlineData(0x02, 2152, 1416, true)]
+    [InlineData(0x02, 2152, 1184, true)]
+    [InlineData(0x04, 1812, 2452, true)]
+    [InlineData(0x05, 2152, 2792, true)]
+    [InlineData(0x02, 1812, 2452, false)]
+    [InlineData(0x04, 2152, 1416, false)]
+    [InlineData(0x05, 2152, 1000, false)]
+    public void MediaAcceptsFrame_MatchesSelphy9550S(int type, int cols, int rows, bool ok)
+    {
+        Assert.Equal(ok, Protocol.MediaAcceptsFrame(type, cols, rows));
+    }
+
+    [Fact]
+    public void ReadHeaderFrame_ReadsColsRows()
+    {
+        var hdr = Protocol.BuildHeaders(MediaCatalog.FiveBySeven, QualityMode.Fine, 1);
+        var (cols, rows) = Protocol.ReadHeaderFrame(hdr);
+        Assert.Equal(1812, cols);
+        Assert.Equal(2452, rows);
     }
 }

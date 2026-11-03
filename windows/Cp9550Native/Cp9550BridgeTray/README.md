@@ -23,3 +23,11 @@ cd windows\Cp9550Native\Cp9550BridgeTray
 ```
 
 Status JSON (written by the bridge): `%ProgramData%\CP9550\bridge-status.json`.
+
+Logs / capture (no UAC):
+
+- `%ProgramData%\CP9550\log\bridge.log` — accept / SendSpool / errors  
+- `%ProgramData%\CP9550\log\last-spool.bin` — last TCP spool  
+- `%ProgramData%\CP9550\spool-capture\` — default tray `--save-dir` (disable with `--no-save-dir`)
+
+**Important:** USB presence uses WinUSB **registry enumeration** (never `OpenUsbDevice`). Opening the device from the tray while `SendSpool` held the handle used to look like “USB gone” and **Kill()** the bridge mid-job — TCP already accepted bytes, printer never got a clean footer / sts3 accept.

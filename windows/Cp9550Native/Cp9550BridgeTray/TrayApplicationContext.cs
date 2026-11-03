@@ -84,6 +84,15 @@ internal sealed class TrayApplicationContext : ApplicationContext
             TryStartBridge("USB connected");
         else
         {
+            // Never kill the bridge while SendSpool is in flight — a false USB-absent
+            // blip used to Stop() mid-job (TCP already accepted; printer rejected incomplete USB).
+            var file = BridgeStatus.TryRead();
+            if (string.Equals(file?.State, "printing", StringComparison.OrdinalIgnoreCase))
+            {
+                RefreshUi("USB blip ignored — job in flight");
+                return;
+            }
+
             _bridge.Stop();
             RefreshUi("USB disconnected — bridge stopped");
         }

@@ -38,16 +38,21 @@ public sealed class PrinterDevice : IDisposable
         _inEndpoint = inEndpoint;
     }
 
+    /// <summary>
+    /// True when a CP-9550DW-S WinUSB interface is enumerated.
+    /// Uses registry enumeration — never <see cref="UsbDevice.OpenUsbDevice"/> —
+    /// so the tray can poll while <see cref="SendSpool"/> holds the only open handle.
+    /// Opening here returned null during a job and made the tray Kill() the bridge mid-transfer
+    /// (USB OUT may have succeeded; printer never got a complete accepted job / footer).
+    /// </summary>
     public static bool IsPresent()
     {
         try
         {
-            var finder = new UsbDeviceFinder(UsbIds.VendorId, UsbIds.ProductIdCp9550DwS);
-            var dev = UsbDevice.OpenUsbDevice(finder);
-            if (dev is null)
-                return false;
-            dev.Close();
-            return true;
+            if (RegistryHasDevice(UsbDevice.AllWinUsbDevices))
+                return true;
+            // Rare non-WinUSB backends (Zadig libusbK / libusb0).
+            return RegistryHasDevice(UsbDevice.AllDevices);
         }
         catch (FormatException)
         {
@@ -56,6 +61,16 @@ public sealed class PrinterDevice : IDisposable
                 "Neplatný WinUSB GUID v ovládači. Spusti znova windows\\install.ps1 (Admin) " +
                 "alebo Zadig → WinUSB, potom odpoj/zapoj USB.");
         }
+    }
+
+    private static bool RegistryHasDevice(UsbRegDeviceList list)
+    {
+        foreach (UsbRegistry reg in list)
+        {
+            if (reg.Vid == UsbIds.VendorId && reg.Pid == UsbIds.ProductIdCp9550DwS)
+                return true;
+        }
+        return false;
     }
 
     public static PrinterDevice Open()
@@ -334,14 +349,26 @@ public sealed class PrinterDevice : IDisposable
         }
 
         // selphy_print CP-9550DW-S sequence:
-        // handshake → media/statusB/status(ready) → 1B 44 00 00 → status again →
+        // handshake → media/statusB/status(ready) → validate_media →
+        // 1B 44 00 00 → media/statusB/status again →
         // hdr1+hdr2+hdr3 → clear-memory → planes → media/statusB/status(check) → footer.
         HandshakeS();
-        _ = MediaStatus();
+        var media = MediaStatus();
         _ = StatusB();
         WaitReadyForJob(TimeSpan.FromSeconds(30));
 
+        var (cols, rows) = Protocol.ReadHeaderFrame(headers);
+        if (!Protocol.MediaAcceptsFrame(media.Type, cols, rows))
+        {
+            throw new InvalidOperationException(
+                $"Spool {cols}×{rows} nezodpovedá vloženej médiá ({media.Name}, type=0x{media.Type:X2}). " +
+                "Skontroluj GPD / PrintTicket media mapping vo V4 filtri.");
+        }
+
         Write(Protocol.StartJobS);
+        // Second gate (selphy): media + statusB + status after StartJobS.
+        _ = MediaStatus();
+        _ = StatusB();
         var pre = Status();
         if (!pre.ReadyForJob)
             throw new InvalidOperationException(
@@ -367,14 +394,16 @@ public sealed class PrinterDevice : IDisposable
         _ = MediaStatus();
         _ = StatusB();
         var sts = Status();
-        // selphy: require sts5==0 and sts3 bits 0xC0 before "end data" footer.
+        // After planes: idle QQ is 0x3E; accepted data raises bit 0x40 or 0x80 (→ 0x7E / 0xBE).
+        // sts5 must stay 0 until footer ("end data") starts the mechanical print.
         if (!sts.ReadyForJob)
             throw new InvalidOperationException(
                 "Pred footerom nie je sts5 ready — tlačiareň pravdepodobne neprijala dáta. " +
                 sts.Summary);
         if ((sts.Sts3 & 0xC0) == 0)
             throw new InvalidOperationException(
-                "Pred footerom neočakávaný sts3 (chýbajú bity 0xC0) — " + sts.Summary);
+                "Pred footerom sts3 bez 0x40/0x80 (dáta neprijaté, ostalo idle 0x3E?). " +
+                sts.Summary);
 
         Write(Protocol.Footer9550S);
         progress?.Report(100);

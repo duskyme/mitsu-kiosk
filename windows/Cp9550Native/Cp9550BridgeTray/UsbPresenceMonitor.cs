@@ -9,8 +9,12 @@ namespace Cp9550BridgeTray;
 /// </summary>
 internal sealed class UsbPresenceMonitor : IDisposable
 {
+    /// <summary>~4.5s at 1500ms — ignore transient Open/enum blips during SendSpool.</summary>
+    private const int DisconnectConfirmPolls = 3;
+
     private readonly System.Windows.Forms.Timer _timer;
     private bool? _last;
+    private int _absentPolls;
     private bool _disposed;
 
     public event Action<bool>? PresenceChanged;
@@ -31,14 +35,30 @@ internal sealed class UsbPresenceMonitor : IDisposable
 
     public void Poll()
     {
-        bool present;
+        bool raw;
         try
         {
-            present = PrinterDevice.IsPresent();
+            raw = PrinterDevice.IsPresent();
         }
         catch
         {
-            present = false;
+            raw = false;
+        }
+
+        bool present;
+        if (raw)
+        {
+            _absentPolls = 0;
+            present = true;
+        }
+        else
+        {
+            _absentPolls++;
+            // Stay "present" until several consecutive misses — a single false during
+            // an in-flight WinUSB claim must not Stop() the bridge.
+            present = _last == true && _absentPolls < DisconnectConfirmPolls;
+            if (_absentPolls >= DisconnectConfirmPolls)
+                present = false;
         }
 
         IsPresent = present;
