@@ -60,6 +60,9 @@ internal sealed class TrayOptions
                 case "--save-dir":
                     save = args[++i];
                     break;
+                case "--no-save-dir":
+                    save = "";
+                    break;
                 case "-h" or "--help" or "/?":
                     MessageBox.Show(
                         "Cp9550BridgeTray — notification-area status for SpoolBridge\n\n" +
@@ -67,11 +70,25 @@ internal sealed class TrayOptions
                         "  --no-auto         Do not auto-start/stop on USB plug\n" +
                         "  --dry-run         Pass --dry-run to the bridge (lab only)\n" +
                         "  --bridge-exe PATH Explicit Cp9550SpoolBridge.exe\n" +
-                        "  --save-dir DIR    Pass --save-dir to the bridge\n",
+                        "  --save-dir DIR    Pass --save-dir to the bridge\n" +
+                        "  --no-save-dir     Disable default last-spool capture dir\n",
                         "CP-9550 Bridge Tray");
                     Environment.Exit(0);
                     break;
             }
+        }
+
+        // Default: keep last few spools under ProgramData for reject diagnostics (no UAC).
+        if (save is null)
+        {
+            save = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                "CP9550",
+                "spool-capture");
+        }
+        else if (save.Length == 0)
+        {
+            save = null;
         }
 
         return new TrayOptions

@@ -22,7 +22,7 @@ Class       = Printer
 ClassGUID   = {4D36E979-E325-11CE-BFC1-08002BE10318}
 CatalogFile = CP9550DW-S-Printer.cat
 ClassVer    = 4.0
-DriverVer   = 11/03/2026,0.4.0.0
+DriverVer   = 11/03/2026,0.4.1.0
 PnpLockdown = 1
 
 [Manufacturer]

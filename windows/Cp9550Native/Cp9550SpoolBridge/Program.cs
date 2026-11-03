@@ -17,6 +17,13 @@ internal static class Program
             "CP9550",
             "bridge-status.json");
 
+    internal static string DefaultLogPath { get; } =
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "CP9550",
+            "log",
+            "bridge.log");
+
     private static int Main(string[] args)
     {
         try
@@ -25,9 +32,47 @@ internal static class Program
         }
         catch (Exception ex)
         {
+            BridgeLog("FATAL: " + ex.Message);
             Console.Error.WriteLine("FATAL: " + ex.Message);
             return 2;
         }
+    }
+
+    /// <summary>Append to %ProgramData%\CP9550\log\bridge.log (shared with filter.log).</summary>
+    internal static void BridgeLog(string msg)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(DefaultLogPath);
+            if (!string.IsNullOrEmpty(dir))
+                Directory.CreateDirectory(dir);
+            var line = $"[{DateTime.Now:HH:mm:ss}] {msg}{Environment.NewLine}";
+            File.AppendAllText(DefaultLogPath, line);
+        }
+        catch
+        {
+            /* never break the bridge on log I/O */
+        }
+
+        Console.WriteLine(msg);
+    }
+
+    internal static void BridgeLogError(string msg)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(DefaultLogPath);
+            if (!string.IsNullOrEmpty(dir))
+                Directory.CreateDirectory(dir);
+            var line = $"[{DateTime.Now:HH:mm:ss}] ERROR {msg}{Environment.NewLine}";
+            File.AppendAllText(DefaultLogPath, line);
+        }
+        catch
+        {
+            /* ignore */
+        }
+
+        Console.Error.WriteLine(msg);
     }
 
     private static int Run(string[] args)
@@ -50,41 +95,41 @@ internal static class Program
         var info = new FileInfo(opts.SpoolFile!);
         if (!info.Exists)
         {
-            Console.Error.WriteLine("Spool file not found: " + opts.SpoolFile);
+            BridgeLogError("Spool file not found: " + opts.SpoolFile);
             return 1;
         }
 
         if (info.Length > opts.MaxReceiveBytes)
         {
-            Console.Error.WriteLine(
+            BridgeLogError(
                 $"Spool file {info.Length} B exceeds --max-receive-bytes {opts.MaxReceiveBytes}.");
             return 1;
         }
 
         var spool = File.ReadAllBytes(opts.SpoolFile!);
-        Console.WriteLine($"One-shot spool {opts.SpoolFile} ({spool.Length} bytes)");
-        return DispatchSpool(spool, opts) ? 0 : 1;
+        BridgeLog($"One-shot spool {opts.SpoolFile} ({spool.Length} bytes)");
+        return DispatchSpool(spool, opts, out _) ? 0 : 1;
     }
 
     private static int Listen(Options opts)
     {
         var listener = new TcpListener(IPAddress.Loopback, opts.Port);
         listener.Start();
-        Console.WriteLine(
+        BridgeLog(
             $"CP-9550 spool bridge listening on 127.0.0.1:{opts.Port} " +
             $"(dryRun={opts.DryRun}, saveDir={opts.SaveDir ?? "-"}, " +
             $"maxReceive={opts.MaxReceiveBytes} B)");
         if (opts.DryRun)
         {
-            Console.WriteLine(
+            BridgeLog(
                 "*** DRY-RUN: TCP accepts + validates/saves only. " +
                 "Windows will report print SUCCESS; the printer will NOT move. ***");
-            Console.WriteLine(
+            BridgeLog(
                 "*** Restart without --dry-run (see windows\\v4-driver\\start-bridge.ps1). ***");
         }
-        Console.WriteLine("Point a Standard TCP/IP Port (RAW) at this address.");
-        Console.WriteLine("Single-flight: busy connections are rejected (no buffered backlog).");
-        Console.WriteLine("Ctrl+C to stop.");
+        BridgeLog("Point a Standard TCP/IP Port (RAW) at this address.");
+        BridgeLog("Single-flight: busy connections are rejected (no buffered backlog).");
+        BridgeLog("Ctrl+C to stop.");
 
         WriteStatus(opts, "listening", lastError: null);
 
@@ -125,8 +170,8 @@ internal static class Program
                     }
                     catch (Exception ex)
                     {
-                        Console.Error.WriteLine($"[{Stamp()}] client error: {ex.Message}");
-                        WriteStatus(opts, "listening", lastError: ex.Message);
+                        BridgeLogError($"[{Stamp()}] client error: {ex.Message}");
+                        WriteStatus(opts, "listening", lastError: TruncateError(ex.Message));
                     }
                 }
             });
@@ -180,13 +225,13 @@ internal static class Program
         client.NoDelay = true;
         client.ReceiveTimeout = opts.ReceiveTimeoutMs;
         var remote = client.Client.RemoteEndPoint?.ToString() ?? "?";
-        Console.WriteLine($"[{Stamp()}] accept {remote}");
+        BridgeLog($"[{Stamp()}] accept {remote}");
 
         // Non-blocking: if a job (including its receive) is in flight, drop this client
         // instead of buffering another full spool in memory.
         if (!jobGate.Wait(0))
         {
-            Console.Error.WriteLine($"[{Stamp()}] busy — rejecting {remote} (single-flight)");
+            BridgeLogError($"[{Stamp()}] busy — rejecting {remote} (single-flight)");
             return;
         }
 
@@ -200,16 +245,17 @@ internal static class Program
             }
             catch (InvalidDataException ex)
             {
-                Console.Error.WriteLine($"[{Stamp()}] receive rejected from {remote}: {ex.Message}");
+                BridgeLogError($"[{Stamp()}] receive rejected from {remote}: {ex.Message}");
+                WriteStatus(opts, "listening", lastError: TruncateError(ex.Message));
                 return;
             }
 
-            Console.WriteLine($"[{Stamp()}] received {spool.Length} bytes from {remote}");
+            BridgeLog($"[{Stamp()}] received {spool.Length} bytes from {remote}");
             WriteStatus(opts, "printing", lastError: null);
-            if (!DispatchSpool(spool, opts))
+            if (!DispatchSpool(spool, opts, out var failReason))
             {
-                Console.Error.WriteLine($"[{Stamp()}] job failed");
-                WriteStatus(opts, "listening", lastError: "job failed");
+                BridgeLogError($"[{Stamp()}] job failed: {failReason}");
+                WriteStatus(opts, "listening", lastError: TruncateError(failReason ?? "job failed"));
             }
             else
             {
@@ -221,6 +267,9 @@ internal static class Program
             jobGate.Release();
         }
     }
+
+    private static string TruncateError(string msg, int max = 240) =>
+        msg.Length <= max ? msg : msg[..max] + "…";
 
     /// <summary>Read until EOF, failing if more than <paramref name="maxBytes"/> arrive.</summary>
     internal static byte[] ReadCapped(Stream stream, int maxBytes)
@@ -250,64 +299,89 @@ internal static class Program
         return ms.ToArray();
     }
 
-    private static bool DispatchSpool(byte[] spool, Options opts)
+    private static bool DispatchSpool(byte[] spool, Options opts, out string? failReason)
     {
+        failReason = null;
         if (spool.Length == 0)
         {
-            Console.Error.WriteLine("Empty spool — ignored.");
+            failReason = "Empty spool — ignored.";
+            BridgeLogError(failReason);
             return false;
         }
 
         try
         {
             ValidateCp9550Header(spool);
+            var (cols, rows) = Protocol.ReadHeaderFrame(spool.AsSpan(0, 150));
+            BridgeLog(
+                $"Spool header OK: {spool.Length} B, frame {cols}×{rows}, " +
+                $"hdr1={Convert.ToHexString(spool.AsSpan(0, 4))}");
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine("Spool validation failed: " + ex.Message);
+            failReason = "Spool validation failed: " + ex.Message;
+            BridgeLogError(failReason);
             if (opts.SaveDir is not null)
                 SaveSpool(opts.SaveDir, spool, "invalid");
             if (!opts.AllowNonNative)
                 return false;
-            Console.WriteLine(
+            BridgeLog(
                 "Continuing because --allow-non-native is set " +
                 "(spike capture only — SendSpool still requires a CP-9550 header).");
+            failReason = null;
         }
 
         if (opts.SaveDir is not null)
             SaveSpool(opts.SaveDir, spool, "ok");
 
+        // Always keep a single rolling copy for reject triage (no UAC).
+        try
+        {
+            var logDir = Path.GetDirectoryName(DefaultLogPath);
+            if (!string.IsNullOrEmpty(logDir))
+            {
+                Directory.CreateDirectory(logDir);
+                File.WriteAllBytes(Path.Combine(logDir, "last-spool.bin"), spool);
+            }
+        }
+        catch (Exception ex)
+        {
+            BridgeLogError("last-spool.bin write failed: " + ex.Message);
+        }
+
         if (opts.DryRun)
         {
-            Console.WriteLine(
+            BridgeLog(
                 $"Dry-run: validated/saved spool ({spool.Length} B). SendSpool skipped.");
             return true;
         }
 
         if (!PrinterDevice.IsPresent())
         {
-            Console.Error.WriteLine(
-                "CP-9550DW-S not present (USB 06D3:03A5). Use --dry-run or connect printer.");
+            failReason =
+                "CP-9550DW-S not present (USB 06D3:03A5). Use --dry-run or connect printer.";
+            BridgeLogError(failReason);
             return false;
         }
 
-        Console.WriteLine("Opening WinUSB and calling PrinterDevice.SendSpool…");
+        BridgeLog("Opening WinUSB and calling PrinterDevice.SendSpool…");
         var progress = new Progress<double>(p =>
         {
             if (p is >= 100 or 0 or 25 or 50 or 75)
-                Console.WriteLine($"  progress {p:0.#}%");
+                BridgeLog($"  progress {p:0.#}%");
         });
 
         try
         {
             using var prn = PrinterDevice.Open();
             prn.SendSpool(spool, progress);
-            Console.WriteLine("SendSpool complete.");
+            BridgeLog("SendSpool complete.");
             return true;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine("SendSpool failed: " + ex.Message);
+            failReason = "SendSpool failed: " + ex.Message;
+            BridgeLogError(failReason);
             return false;
         }
     }

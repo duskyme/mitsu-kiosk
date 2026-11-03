@@ -89,10 +89,11 @@
     }
 }
 
-*% Maps to psk:PageOutputQuality. Filter scrapes Normal/High/Photographic (+ aliases).
+*% Maps to psk:PageOutputQuality. Filter scrapes that feature (Normal/High/Photographic).
 *Feature: Quality
 {
     *Name: "Print Quality"
+    *PrintSchemaKeywordMap: "PageOutputQuality"
     *DefaultOption: SUPERFINE
 
     *Option: FINE
