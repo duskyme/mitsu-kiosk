@@ -21,3 +21,5 @@ Outputs (gitignored under repo `dist/`):
 - `dist/releases/CP9550-Native-<ver>-portable.zip`
 
 Setup uses `PrivilegesRequired=lowest` (no UAC). Drivers are installed afterward via `Install-Drivers.ps1` from an already-elevated Admin shell.
+
+Optional installer task `logonstartup` writes `HKCU\...\Run\CP9550BridgeTray` (unchecked by default). Same via `Start-Tray.ps1 -RegisterStartup` or the tray menu.

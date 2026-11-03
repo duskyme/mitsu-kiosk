@@ -7,6 +7,7 @@ Notification-area (near the clock) companion for `Cp9550SpoolBridge`.
 - Shows bridge status (USB present / listening / dry-run / stopped).
 - **Auto-starts** the bridge when CP-9550DW-S USB (`06D3:03A5`) appears; **stops** it on unplug.
 - Manual **Start / Restart / Stop** from the tray menu.
+- **Optional** Windows logon start via `HKCU\...\Run` (installer task, `-RegisterStartup`, or tray menu **Start with Windows (logon)**). Off by default.
 
 ## Retail note
 
@@ -20,6 +21,8 @@ cd windows\Cp9550Native\Cp9550BridgeTray
 # Optional:
 .\start-tray.ps1 -NoAuto
 .\start-tray.ps1 -DryRun   # lab only
+.\start-tray.ps1 -RegisterStartup     # HKCU Run — start tray at logon
+.\start-tray.ps1 -UnregisterStartup   # remove logon Run value
 ```
 
 Status JSON (written by the bridge): `%ProgramData%\CP9550\bridge-status.json`.

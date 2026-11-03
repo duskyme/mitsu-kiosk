@@ -42,3 +42,6 @@ windows/v4-driver/filter/_out/
 *.njsproj
 *.sln
 *.sw?
+
+windows/packaging/_smoke*/
+

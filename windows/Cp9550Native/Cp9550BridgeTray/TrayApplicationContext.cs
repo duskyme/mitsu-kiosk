@@ -9,6 +9,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly System.Windows.Forms.Timer _uiTimer;
     private readonly ToolStripMenuItem _statusItem;
     private readonly ToolStripMenuItem _autoItem;
+    private readonly ToolStripMenuItem _logonItem;
 
     public TrayApplicationContext(TrayOptions opts)
     {
@@ -32,10 +33,17 @@ internal sealed class TrayApplicationContext : ApplicationContext
             }
         };
 
+        _logonItem = new ToolStripMenuItem("Start with Windows (logon)")
+        {
+            Checked = LogonStartup.IsRegistered(),
+            CheckOnClick = true,
+        };
+
         var menu = new ContextMenuStrip();
         menu.Items.Add(_statusItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_autoItem);
+        menu.Items.Add(_logonItem);
         menu.Items.Add("Start bridge", null, (_, _) => TryStartBridge("manual"));
         menu.Items.Add("Restart bridge", null, (_, _) =>
         {
@@ -58,6 +66,24 @@ internal sealed class TrayApplicationContext : ApplicationContext
             ContextMenuStrip = menu,
         };
         _icon.DoubleClick += (_, _) => TryStartBridge("double-click");
+
+        _logonItem.CheckedChanged += (_, _) =>
+        {
+            try
+            {
+                if (_logonItem.Checked)
+                    LogonStartup.Register(_opts);
+                else
+                    LogonStartup.Unregister();
+            }
+            catch (Exception ex)
+            {
+                _logonItem.Checked = LogonStartup.IsRegistered();
+                _icon.BalloonTipTitle = "CP-9550 Bridge";
+                _icon.BalloonTipText = "Logon startup: " + ex.Message;
+                _icon.ShowBalloonTip(4000);
+            }
+        };
 
         _usb.PresenceChanged += OnUsbChanged;
         _usb.Start();
