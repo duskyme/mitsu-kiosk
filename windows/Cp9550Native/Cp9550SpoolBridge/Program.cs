@@ -69,6 +69,14 @@ internal static class Program
             $"CP-9550 spool bridge listening on 127.0.0.1:{opts.Port} " +
             $"(dryRun={opts.DryRun}, saveDir={opts.SaveDir ?? "-"}, " +
             $"maxReceive={opts.MaxReceiveBytes} B)");
+        if (opts.DryRun)
+        {
+            Console.WriteLine(
+                "*** DRY-RUN: TCP accepts + validates/saves only. " +
+                "Windows will report print SUCCESS; the printer will NOT move. ***");
+            Console.WriteLine(
+                "*** Restart without --dry-run (see windows\\v4-driver\\start-bridge.ps1). ***");
+        }
         Console.WriteLine("Point a Standard TCP/IP Port (RAW) at this address.");
         Console.WriteLine("Single-flight: busy connections are rejected (no buffered backlog).");
         Console.WriteLine("Ctrl+C to stop.");

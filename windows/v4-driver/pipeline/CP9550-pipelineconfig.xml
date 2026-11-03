@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Phase 1 IHV render filter pipeline.
-  XPS -> Cp9550RenderFilter (planar RGB spool) -> Standard TCP/IP Port -> Cp9550SpoolBridge.
+  XPS to Cp9550RenderFilter (planar RGB spool) to Standard TCP/IP Port to Cp9550SpoolBridge.
   XpsRasterService is a FilterServiceProvider (property bag), not a RequiredFiles entry.
-  Cp9550RenderFilter.dll ships in this package via INF CopyFiles -- never list it in
-  manifest RequiredFiles (those resolve from ntprint/ntprint4 core packages only;
-  doing so triggers PrintService event 235).
+  Cp9550RenderFilter.dll ships via INF CopyFiles only. Never put it in manifest
+  RequiredFiles (core-package resolution only triggers PrintService event 235).
+  XML comments must not contain double-hyphen; that made the pipeline unparsable
+  and surfaced as PrintService event 372 / 0x80004005 before InitializeFilter.
 -->
 <Filters>
   <Filter dll="Cp9550RenderFilter.dll"
