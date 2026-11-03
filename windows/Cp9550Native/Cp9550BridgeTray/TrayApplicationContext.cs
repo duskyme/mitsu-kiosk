@@ -10,6 +10,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _statusItem;
     private readonly ToolStripMenuItem _autoItem;
     private readonly ToolStripMenuItem _logonItem;
+    private string? _lastHealthNote;
 
     public TrayApplicationContext(TrayOptions opts)
     {
@@ -47,8 +48,25 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add("Start bridge", null, (_, _) => TryStartBridge("manual"));
         menu.Items.Add("Restart bridge", null, (_, _) =>
         {
-            _bridge.Restart();
-            RefreshUi("restarted");
+            try
+            {
+                _bridge.Restart();
+                RefreshUi("restarted");
+            }
+            catch (Exception ex)
+            {
+                ShowErrorBalloon(ex.Message);
+                RefreshUi("error: " + ex.Message);
+            }
+        });
+        menu.Items.Add("Clean zombies", null, (_, _) =>
+        {
+            var n = _bridge.CleanupZombies();
+            var note = n > 0 ? $"cleaned {n} zombie(s)" : "no zombies";
+            if (_autoItem.Checked && _usb.IsPresent)
+                TryStartBridge(note);
+            else
+                RefreshUi(note);
         });
         menu.Items.Add("Stop bridge", null, (_, _) =>
         {
@@ -79,9 +97,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             catch (Exception ex)
             {
                 _logonItem.Checked = LogonStartup.IsRegistered();
-                _icon.BalloonTipTitle = "CP-9550 Bridge";
-                _icon.BalloonTipText = "Logon startup: " + ex.Message;
-                _icon.ShowBalloonTip(4000);
+                ShowErrorBalloon("Logon startup: " + ex.Message);
             }
         };
 
@@ -89,7 +105,21 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _usb.Start();
 
         _uiTimer = new System.Windows.Forms.Timer { Interval = 2000 };
-        _uiTimer.Tick += (_, _) => RefreshUi(null);
+        _uiTimer.Tick += (_, _) =>
+        {
+            var want = _autoItem.Checked && _usb.IsPresent;
+            var note = _bridge.EnsureHealthy(want);
+            if (!string.IsNullOrEmpty(note) && note != _lastHealthNote)
+            {
+                _lastHealthNote = note;
+                if (note.Contains("failed", StringComparison.OrdinalIgnoreCase) ||
+                    note.Contains("zombie", StringComparison.OrdinalIgnoreCase) ||
+                    note.Contains("busy", StringComparison.OrdinalIgnoreCase))
+                    ShowErrorBalloon(note);
+            }
+
+            RefreshUi(note);
+        };
         _uiTimer.Start();
 
         if (_autoItem.Checked && _usb.IsPresent)
@@ -115,12 +145,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
             var file = BridgeStatus.TryRead();
             if (string.Equals(file?.State, "printing", StringComparison.OrdinalIgnoreCase))
             {
-                RefreshUi("USB blip ignored — job in flight");
+                RefreshUi("USB blip ignored - job in flight");
                 return;
             }
 
             _bridge.Stop();
-            RefreshUi("USB disconnected — bridge stopped");
+            RefreshUi("USB disconnected - bridge stopped");
         }
     }
 
@@ -133,28 +163,46 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
         catch (Exception ex)
         {
-            _icon.BalloonTipTitle = "CP-9550 Bridge";
-            _icon.BalloonTipText = ex.Message;
-            _icon.ShowBalloonTip(4000);
+            ShowErrorBalloon(ex.Message);
             RefreshUi("error: " + ex.Message);
         }
+    }
+
+    private void ShowErrorBalloon(string message)
+    {
+        _icon.BalloonTipIcon = ToolTipIcon.Error;
+        _icon.BalloonTipTitle = "CP-9550 Bridge";
+        _icon.BalloonTipText = message.Length > 250 ? message[..250] : message;
+        _icon.ShowBalloonTip(5000);
     }
 
     private void RefreshUi(string? note)
     {
         var usb = _usb.IsPresent;
-        var running = _bridge.IsRunning || _bridge.IsPortListening();
+        var health = _bridge.AssessHealth();
         var file = BridgeStatus.TryRead();
         var dry = _opts.DryRun || (file?.DryRun ?? false);
+        var healthy = health.Health == BridgeHealth.Healthy;
+        var broken = health.Health is BridgeHealth.ZombieProcess or BridgeHealth.PortOrphan
+            || (usb && _autoItem.Checked && health.Health == BridgeHealth.Stopped)
+            || (note is not null && note.StartsWith("error:", StringComparison.OrdinalIgnoreCase));
 
-        var state = !usb
-            ? "USB absent"
-            : running
-                ? (dry ? "listening (DRY-RUN)" : "listening")
-                : "USB present, bridge stopped";
+        string state = health.Health switch
+        {
+            BridgeHealth.ZombieProcess => "BRIDGE ZOMBIE (cleaned/retry)",
+            BridgeHealth.PortOrphan => "port busy (no bridge process)",
+            BridgeHealth.Healthy when dry => "listening (DRY-RUN)",
+            BridgeHealth.Healthy => "listening",
+            BridgeHealth.Stopped when !usb => "USB absent",
+            BridgeHealth.Stopped => "USB present, bridge stopped",
+            _ => "unknown",
+        };
 
-        var tip = $"CP-9550 Bridge — {state}";
-        if (_bridge.ProcessId is int pid)
+        if (!string.IsNullOrEmpty(note) && note.StartsWith("error:", StringComparison.OrdinalIgnoreCase))
+            state = "ERROR";
+
+        var tip = $"CP-9550 Bridge - {state}";
+        if (health.PrimaryPid is int pid)
             tip += $"\nPID {pid} · 127.0.0.1:{_opts.Port}";
         if (!string.IsNullOrEmpty(note))
             tip += "\n" + note;
@@ -164,14 +212,20 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _icon.Text = tip;
         _statusItem.Text = $"Status: {state}" + (note is null ? "" : $" ({note})");
 
-        // Simple icon cue: error vs app
+        // Icon: red Error when bridge does not work; yellow Exclamation for dry-run;
+        // Warning when USB absent; Information when healthy.
         try
         {
-            _icon.Icon = !usb
-                ? SystemIcons.Warning
-                : running
-                    ? (dry ? SystemIcons.Exclamation : SystemIcons.Information)
-                    : SystemIcons.Application;
+            if (broken || health.Health == BridgeHealth.ZombieProcess || health.Health == BridgeHealth.PortOrphan)
+                _icon.Icon = SystemIcons.Error; // red
+            else if (!usb)
+                _icon.Icon = SystemIcons.Warning;
+            else if (healthy && dry)
+                _icon.Icon = SystemIcons.Exclamation;
+            else if (healthy)
+                _icon.Icon = SystemIcons.Information;
+            else
+                _icon.Icon = SystemIcons.Error; // USB present but not listening
         }
         catch
         {

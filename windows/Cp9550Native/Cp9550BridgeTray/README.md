@@ -34,3 +34,10 @@ Logs / capture (no UAC):
 - `%ProgramData%\CP9550\spool-capture\` — default tray `--save-dir` (disable with `--no-save-dir`)
 
 **Important:** USB presence uses WinUSB **registry enumeration** (never `OpenUsbDevice`). Opening the device from the tray while `SendSpool` held the handle used to look like “USB gone” and **Kill()** the bridge mid-job — TCP already accepted bytes, printer never got a clean footer / sts3 accept.
+
+## Health / zombies
+
+Every ~2s the tray checks SpoolBridge health (process + bind-probe on `127.0.0.1:9100`).
+Processes that are alive but not listening are **zombies** - they are killed and the bridge is restarted when USB auto-start is on.
+Tray icon: **red Error** when the bridge is not healthy; blue Information when listening; yellow Exclamation for dry-run.
+Menu: **Clean zombies**.

@@ -4,7 +4,7 @@
 ; Driver install is a separate Admin step: Install-Drivers.ps1
 
 #ifndef MyAppVersion
-  #define MyAppVersion "0.4.3"
+  #define MyAppVersion "0.4.4"
 #endif
 
 #define MyAppName "CP-9550 Native"
